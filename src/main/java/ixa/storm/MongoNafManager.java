@@ -122,6 +122,7 @@ public class MongoNafManager {
 
     public void createIndexes() {
 	System.out.println("Creating indexes...");
+	this.rawColl.createIndex(new BasicDBObject("docId", 1));
 	this.textColl.createIndex(new BasicDBObject("docId", 1));
 	this.termsColl.createIndex(new BasicDBObject("docId", 1));
 	this.entitiesColl.createIndex(new BasicDBObject("docId", 1));
