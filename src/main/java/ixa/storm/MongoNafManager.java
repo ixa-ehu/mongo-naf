@@ -15,9 +15,10 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.net.UnknownHostException;
+import java.io.Serializable;
 
 
-public class MongoNafManager {
+public class MongoNafManager implements Serializable {
 
     private static MongoNafManager instance;
     private String nafVersion;
@@ -31,7 +32,8 @@ public class MongoNafManager {
     private DBCollection entitiesColl;
 
     public static MongoNafManager instance(String server, int port, String dbName)
-	throws Exception {
+	throws MongoNafException
+    {
 	if (instance == null) {
 	    instance = new MongoNafManager(server, port, dbName);
 	}
@@ -39,21 +41,21 @@ public class MongoNafManager {
     }
 
     private MongoNafManager(String server, int port, String dbName)
-	throws Exception {
+	throws MongoNafException {
 	try {
 	    MongoClient mongoClient = new MongoClient(server, port);
 	    this.db = mongoClient.getDB(dbName);
-	    this.logColl = this.db.getCollection("log");
-	    this.sesColl = this.db.getCollection("session");
-	    this.rawColl = this.db.getCollection("raw");
-	    this.textColl = this.db.getCollection("text");
-	    this.termsColl = this.db.getCollection("terms");
-	    this.entitiesColl = this.db.getCollection("entities");
-	    if (this.textColl.getIndexInfo().size() == 0) {
-		this.createIndexes();
-	    }
 	} catch(Exception e) {
-	    throw e;
+	    throw new MongoNafException("Error connecting to MongoDB.");
+	}
+	this.logColl = this.db.getCollection("log");
+	this.sesColl = this.db.getCollection("session");
+	this.rawColl = this.db.getCollection("raw");
+	this.textColl = this.db.getCollection("text");
+	this.termsColl = this.db.getCollection("terms");
+	this.entitiesColl = this.db.getCollection("entities");
+	if (this.textColl.getIndexInfo().size() == 0) {
+	    this.createIndexes();
 	}
 	// Default NAF values
 	this.nafVersion = "mongodb_test_version";
@@ -144,17 +146,30 @@ public class MongoNafManager {
 	    String layer = naf.getRawText();
 	    this.insertRawText(layer, docId, sessionId);
 	}
-	else if (layerName.equals("text")) {
-	    List<WF> layer = naf.getWFs();
-	    this.insertWFs(layer, docId, sessionId);
-	}
-	else if (layerName.equals("terms")) {
-	    List<Term> layer = naf.getTerms();
-	    this.insertTerms(layer, docId, sessionId);
-	}
-	else if (layerName.equals("entities")) {
-	    List<Entity> layer = naf.getEntities();
-	    this.insertEntities(layer, docId, sessionId);
+	else {
+	    Integer firstSent = naf.getFirstSentence();
+	    Integer lastSent = firstSent + naf.getNumSentences() - 1;
+	    if (layerName.equals("text")) {
+		for (int i = firstSent; i <= lastSent; i++) {
+		    List<WF> layer = naf.getWFsBySent(i);
+		    Integer paragraph = layer.get(0).getPara();
+		    this.insertWFs(layer, docId, sessionId, i, paragraph);
+		}
+	    }
+	    else if (layerName.equals("terms")) {
+		for (int i = firstSent; i <= lastSent; i++) {
+		    List<Term> layer = naf.getTermsBySent(i);
+		    Integer paragraph = layer.get(0).getSpan().getTargets().get(0).getPara();
+		    this.insertTerms(layer, docId, sessionId, i, paragraph);
+		}
+	    }
+	    else if (layerName.equals("entities")) {
+		for (int i = firstSent; i <= lastSent; i++) {
+		    List<Entity> layer = naf.getEntitiesBySent(i);
+		    Integer paragraph = layer.get(0).getSpans().get(0).getTargets().get(0).getSpan().getTargets().get(0).getPara();
+		    this.insertEntities(layer, docId, sessionId, i, paragraph);
+		}
+	    }
 	}
     }
 
@@ -169,11 +184,13 @@ public class MongoNafManager {
 	}
     }
 
-    private void insertWFs(List<WF> wfs, String docId, Integer sessionId) {
+    private void insertWFs(List<WF> wfs, String docId, Integer sessionId, Integer sentence, Integer paragraph) {
 	String id = docId + "_" + sessionId;
 	BasicDBObject doc = new BasicDBObject("_id", id)
-	    .append("docId", docId)
-	    .append("session_id", sessionId);
+	    .append("doc_id", docId)
+	    .append("session_id", sessionId)
+	    .append("sentence", sentence)
+	    .append("paragraph", paragraph);
 	List<BasicDBObject> wfObjs = new ArrayList<BasicDBObject>();
 	for (WF wf : wfs) {
 	    BasicDBObject wfObj = new BasicDBObject("id", wf.getId()).
@@ -193,11 +210,13 @@ public class MongoNafManager {
 	}
     }
 
-    public void insertTerms(List<Term> terms, String docId, Integer sessionId) {
+    public void insertTerms(List<Term> terms, String docId, Integer sessionId, Integer sentence, Integer paragraph) {
 	String id = docId + "_" + sessionId;
 	BasicDBObject doc = new BasicDBObject("_id", id)
 	    .append("docId", docId)
-	    .append("session_id", sessionId);
+	    .append("session_id", sessionId)
+	    .append("sentence", sentence)
+	    .append("paragraph", paragraph);
 	List<BasicDBObject> termObjs = new ArrayList<BasicDBObject>();
 	for (Term term : terms) {
 	    // Id
@@ -245,11 +264,13 @@ public class MongoNafManager {
 	return extRefObj;
     }
 
-    public void insertEntities(List<Entity> entities, String docId, Integer sessionId) {
+    public void insertEntities(List<Entity> entities, String docId, Integer sessionId, Integer sentence, Integer paragraph) {
 	String id = docId + "_" + sessionId;
 	BasicDBObject doc = new BasicDBObject("_id", id)
 	    .append("docId", docId)
-	    .append("session_id", sessionId);
+	    .append("session_id", sessionId)
+	    .append("sentence", sentence)
+	    .append("paragraph", paragraph);	
 	List<BasicDBObject> entityObjs = new ArrayList<BasicDBObject>();
 	for (Entity entity : entities) {
 	    BasicDBObject entityObj = new BasicDBObject("id", entity.getId()).
@@ -278,7 +299,7 @@ public class MongoNafManager {
     }
 
 
-    public KAFDocument getNaf(Integer sessionId, String docId, String layerName)
+    public KAFDocument getNaf(Integer sessionId, String docId, String layerName, String granularity, Integer shardNum)
     {
 	if (!this.validLayerName(layerName)) {
 	    return null;
@@ -292,18 +313,23 @@ public class MongoNafManager {
 	this.queryRawTextLayer(sessionId, docId, naf);
 	if (layerName.equals("raw")) return naf;
 	// Text
-	wfIndex = this.queryTextLayer(sessionId, docId, naf);
+	wfIndex = this.queryTextLayer(sessionId, docId, naf, granularity, shardNum);
 	if (layerName.equals("text")) return naf;
 	// Terms    
-	termIndex = this.queryTermsLayer(sessionId, docId, naf, wfIndex);
+	termIndex = this.queryTermsLayer(sessionId, docId, naf, wfIndex, granularity, shardNum);
 	if (layerName.equals("terms")) return naf;
 	wfIndex = null;
 	// Entities
-	entityIndex = this.queryEntitiesLayer(sessionId, docId, naf, termIndex);
+	entityIndex = this.queryEntitiesLayer(sessionId, docId, naf, termIndex, granularity, shardNum);
 	if (layerName.equals("entities")) return naf;
 	termIndex = null;
 
 	return naf;
+    }
+
+    public KAFDocument getNaf(Integer sessionId, String docId, String layerName)
+    {
+	return this.getNaf(sessionId, docId, layerName, "D", null);
     }
 
     public boolean validLayerName(String layerName)
@@ -326,61 +352,85 @@ public class MongoNafManager {
 	naf.setRawText(raw);
     }
 
-    private HashMap<String, WF> queryTextLayer(Integer sessionId, String docId, KAFDocument naf) {
+    private HashMap<String, WF> queryTextLayer(Integer sessionId, String docId, KAFDocument naf, String granularity, Integer shardNum) {
 	String id = docId + "_" + sessionId;
 	BasicDBObject query = new BasicDBObject("_id", id);
-	List<DBObject> mongoWfs = (List<DBObject>) this.textColl.findOne(query).get("wfs");
+	if (granularity == "P") {
+	    query.append("paragraph", shardNum);
+	} else if (granularity == "S") {
+	    query.append("sentence", shardNum);
+	}
+	DBCursor cursor = this.textColl.find(query);
 	HashMap<String, WF> wfIndex = new HashMap<String, WF>();
-	for (DBObject mongoWf : mongoWfs) {
-	    WF wf = naf.newWF((String) mongoWf.get("id"), (String) mongoWf.get("form"), (Integer) mongoWf.get("sent"));
-	    if (mongoWf.containsField("para")) wf.setPara((Integer) mongoWf.get("para"));
-	    if (mongoWf.containsField("page")) wf.setPage((Integer) mongoWf.get("page"));
-	    if (mongoWf.containsField("offset")) wf.setOffset((Integer) mongoWf.get("offset"));
-	    if (mongoWf.containsField("length")) wf.setLength((Integer) mongoWf.get("length"));
-	    if (mongoWf.containsField("xpath")) wf.setXpath((String) mongoWf.get("xpath"));
-	    wfIndex.put(wf.getId(), wf);
+	while (cursor.hasNext()) {
+	    List<DBObject> mongoWfs = (List<DBObject>) cursor.next().get("wfs");
+	    for (DBObject mongoWf : mongoWfs) {
+		WF wf = naf.newWF((String) mongoWf.get("id"), (String) mongoWf.get("form"), (Integer) mongoWf.get("sent"));
+		if (mongoWf.containsField("para")) wf.setPara((Integer) mongoWf.get("para"));
+		if (mongoWf.containsField("page")) wf.setPage((Integer) mongoWf.get("page"));
+		if (mongoWf.containsField("offset")) wf.setOffset((Integer) mongoWf.get("offset"));
+		if (mongoWf.containsField("length")) wf.setLength((Integer) mongoWf.get("length"));
+		if (mongoWf.containsField("xpath")) wf.setXpath((String) mongoWf.get("xpath"));
+		wfIndex.put(wf.getId(), wf);
+	    }
 	}
 	return wfIndex;
     }
 
-    private HashMap<String, Term> queryTermsLayer(Integer sessionId, String docId, KAFDocument naf, HashMap<String, WF> wfIndex) {
+    private HashMap<String, Term> queryTermsLayer(Integer sessionId, String docId, KAFDocument naf, HashMap<String, WF> wfIndex, String granularity, Integer shardNum) {
 	String id = docId + "_" + sessionId;
 	BasicDBObject query = new BasicDBObject("_id", id);
-        List<DBObject> mongoTerms = (List<DBObject>) this.termsColl.findOne(query).get("terms");
+	if (granularity == "P") {
+	    query.append("paragraph", shardNum);
+	} else if (granularity == "S") {
+	    query.append("sentence", shardNum);
+	}
+	DBCursor cursor = this.termsColl.find(query);
 	HashMap<String, Term> termIndex = new HashMap<String, Term>();
-	for (DBObject mongoTerm : mongoTerms) {
-	    BasicDBList wfIds = (BasicDBList) mongoTerm.get("anchor");
-	    Span<WF> wfs = KAFDocument.newWFSpan();
-	    for (int i = 0; i < wfIds.size(); i++) {
-		wfs.addTarget(wfIndex.get((String) wfIds.get(i)));
+	while (cursor.hasNext()) {
+	    List<DBObject> mongoTerms = (List<DBObject>) cursor.next().get("terms");
+	    for (DBObject mongoTerm : mongoTerms) {
+		BasicDBList wfIds = (BasicDBList) mongoTerm.get("anchor");
+		Span<WF> wfs = KAFDocument.newWFSpan();
+		for (int i = 0; i < wfIds.size(); i++) {
+		    wfs.addTarget(wfIndex.get((String) wfIds.get(i)));
+		}
+		Term term = naf.newTerm((String) mongoTerm.get("id"), wfs);
+		if (mongoTerm.containsField("type")) term.setType((String) mongoTerm.get("type"));
+		if (mongoTerm.containsField("lemma")) term.setLemma((String) mongoTerm.get("lemma"));
+		if (mongoTerm.containsField("pos")) term.setPos((String) mongoTerm.get("pos"));
+		if (mongoTerm.containsField("morphofeat")) term.setMorphofeat((String) mongoTerm.get("morphofeat"));
+		if (mongoTerm.containsField("case")) term.setCase((String) mongoTerm.get("case"));
+		termIndex.put(term.getId(), term);
 	    }
-	    Term term = naf.newTerm((String) mongoTerm.get("id"), wfs);
-	    if (mongoTerm.containsField("type")) term.setType((String) mongoTerm.get("type"));
-	    if (mongoTerm.containsField("lemma")) term.setLemma((String) mongoTerm.get("lemma"));
-	    if (mongoTerm.containsField("pos")) term.setPos((String) mongoTerm.get("pos"));
-	    if (mongoTerm.containsField("morphofeat")) term.setMorphofeat((String) mongoTerm.get("morphofeat"));
-	    if (mongoTerm.containsField("case")) term.setCase((String) mongoTerm.get("case"));
-	    termIndex.put(term.getId(), term);
 	}
 	return termIndex;
     }
     
-    private HashMap<String, Entity> queryEntitiesLayer(Integer sessionId, String docId, KAFDocument naf, HashMap<String, Term> termIndex) {
+    private HashMap<String, Entity> queryEntitiesLayer(Integer sessionId, String docId, KAFDocument naf, HashMap<String, Term> termIndex, String granularity, Integer shardNum) {
 	String id = docId + "_" + sessionId;
 	BasicDBObject query = new BasicDBObject("_id", id);
-        List<DBObject> mongoEntities = (List<DBObject>) this.entitiesColl.findOne(query).get("entities");
+	if (granularity == "P") {
+	    query.append("paragraph", shardNum);
+	} else if (granularity == "S") {
+	    query.append("sentence", shardNum);
+	}
+	DBCursor cursor = this.entitiesColl.find(query);
 	HashMap<String, Entity> entityIndex = new HashMap<String, Entity>();
-	for (DBObject mongoEntity : mongoEntities) {
-	    BasicDBList termIds = (BasicDBList) mongoEntity.get("anchor");
-	    Span<Term> terms = KAFDocument.newTermSpan();
-	    for (int i = 0; i < termIds.size(); i++) {
-		terms.addTarget(termIndex.get((String) termIds.get(i)));
+	while (cursor.hasNext()) {
+	    List<DBObject> mongoEntities = (List<DBObject>) cursor.next().get("entities");
+	    for (DBObject mongoEntity : mongoEntities) {
+		BasicDBList termIds = (BasicDBList) mongoEntity.get("anchor");
+		Span<Term> terms = KAFDocument.newTermSpan();
+		for (int i = 0; i < termIds.size(); i++) {
+		    terms.addTarget(termIndex.get((String) termIds.get(i)));
+		}
+		List<Span<Term>> termSpans = new ArrayList<Span<Term>>();
+		termSpans.add(terms);
+		Entity entity = naf.newEntity((String) mongoEntity.get("id"), termSpans);
+		if (mongoEntity.containsField("type")) entity.setType((String) mongoEntity.get("type"));
+		entityIndex.put(entity.getId(), entity);
 	    }
-	    List<Span<Term>> termSpans = new ArrayList<Span<Term>>();
-	    termSpans.add(terms);
-	    Entity entity = naf.newEntity((String) mongoEntity.get("id"), termSpans);
-	    if (mongoEntity.containsField("type")) entity.setType((String) mongoEntity.get("type"));
-	    entityIndex.put(entity.getId(), entity);
 	}
 	return entityIndex;
     }
