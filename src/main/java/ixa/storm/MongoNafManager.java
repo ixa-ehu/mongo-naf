@@ -308,6 +308,44 @@ public class MongoNafManager implements Serializable {
 	if (term.hasPos()) termObj.append("pos", term.getPos());
 	if (term.hasMorphofeat()) termObj.append("morphofeat", term.getMorphofeat());
 	if (term.hasCase()) termObj.append("case", term.getCase());
+	if (term.hasSentiment()) { // Sentiment
+	    Term.Sentiment sentiment = term.getSentiment();
+	    BasicDBObject sentimentObj = new BasicDBObject();
+	    if (sentiment.hasResource()) sentimentObj.append("resource", sentiment.getResource());
+	    if (sentiment.hasPolarity()) sentimentObj.append("polarity", sentiment.getPolarity());
+	    if (sentiment.hasStrength()) sentimentObj.append("strength", sentiment.getStrength());
+	    if (sentiment.hasSubjectivity()) sentimentObj.append("subjectivity", sentiment.getSubjectivity());
+	    if (sentiment.hasSentimentSemanticType()) sentimentObj.append("sentimentSemanticType", sentiment.getSentimentSemanticType());
+	    if (sentiment.hasSentimentModifier()) sentimentObj.append("sentimentModifier", sentiment.getSentimentModifier());
+	    if (sentiment.hasSentimentMarker()) sentimentObj.append("sentimentMarker", sentiment.getSentimentMarker());
+	    if (sentiment.hasSentimentProductFeature()) sentimentObj.append("sentimentProductFeature", sentiment.getSentimentProductFeature());
+	    termObj.append("sentiment", sentimentObj);
+	}
+	String headId = (term.getHead() != null) ? term.getHead().getId() : "";
+	List<Term> components = term.getComponents();
+	if (components.size() > 0) {
+	    List<DBObject> componentsObj = new ArrayList<DBObject>();
+	    for (Term component : components) {
+		BasicDBObject componentObj = new BasicDBObject("id", component.getId());
+		if (component.hasType()) componentObj.append("type", component.getType());
+		if (component.hasLemma()) componentObj.append("lemma", component.getLemma());
+		if (component.hasPos()) componentObj.append("pos", component.getPos());
+		if (component.hasMorphofeat()) componentObj.append("morphofeat", component.getMorphofeat());
+		if (component.hasCase()) componentObj.append("case", component.getCase());
+		if (component.getId() == headId) componentObj.append("head", true);
+		List<ExternalRef> externalRefs = component.getExternalRefs();
+		if (!externalRefs.isEmpty()) {
+		    List<DBObject> externalRefObjs = new ArrayList<DBObject>();
+		    for (ExternalRef extRef : externalRefs) {
+			DBObject externalRefObj = this.map(extRef);
+			externalRefObjs.add(externalRefObj);
+		    }
+		    componentObj.append("external_references", externalRefObjs);
+		}
+		componentsObj.add(componentObj);
+	    }
+	    termObj.append("components", componentsObj);
+	}
 	// Anchor
 	List<String> anchor = new ArrayList<String>();
 	for (WF wf : term.getWFs()) {
@@ -667,8 +705,44 @@ public class MongoNafManager implements Serializable {
 		if (mongoTerm.containsField("pos")) term.setPos((String) mongoTerm.get("pos"));
 		if (mongoTerm.containsField("morphofeat")) term.setMorphofeat((String) mongoTerm.get("morphofeat"));
 		if (mongoTerm.containsField("case")) term.setCase((String) mongoTerm.get("case"));
-		termIndex.put(term.getId(), term);
+		if (mongoTerm.containsField("sentiment")) {
+		    DBObject mongoSentiment = (DBObject) mongoTerm.get("sentiment");
+		    Term.Sentiment sentiment = naf.newSentiment();
+		    if (mongoSentiment.containsField("resource"))
+			sentiment.setResource((String) mongoSentiment.get("resource"));
+		    if (mongoSentiment.containsField("polarity"))
+			sentiment.setPolarity((String) mongoSentiment.get("polarity"));
+		    if (mongoSentiment.containsField("strength"))
+			sentiment.setStrength((String) mongoSentiment.get("strength"));
+		    if (mongoSentiment.containsField("subjectivity"))
+			sentiment.setSubjectivity((String) mongoSentiment.get("subjectivity"));
+		    if (mongoSentiment.containsField("sentimentSemanticType"))
+			sentiment.setSentimentSemanticType((String) mongoSentiment.get("sentimentSemanticType"));
+		    if (mongoSentiment.containsField("sentimentModifier"))
+			sentiment.setSentimentModifier((String) mongoSentiment.get("sentimentModifier"));
+		    if (mongoSentiment.containsField("sentimentMarker"))
+			sentiment.setSentimentMarker((String) mongoSentiment.get("sentimentMarker"));
+		    if (mongoSentiment.containsField("sentimentProductFeature"))
+			sentiment.setSentimentProductFeature((String) mongoSentiment.get("sentimentProductFeature"));
+		    term.setSentiment(sentiment);
+		}
+		if (mongoTerm.containsField("components")) {
+		    List<DBObject> mongoComponents = (List<DBObject>) mongoTerm.get("components");
+		    for (DBObject mongoComponent : mongoComponents) {
+			Term component = naf.newTerm((String) mongoComponent.get("id"), naf.newWFSpan(), true);
+			if (mongoComponent.containsField("type")) component.setType((String) mongoComponent.get("type"));
+			if (mongoComponent.containsField("lemma")) component.setLemma((String) mongoComponent.get("lemma"));
+			if (mongoComponent.containsField("pos")) component.setPos((String) mongoComponent.get("pos"));
+			if (mongoComponent.containsField("morphofeat")) component.setMorphofeat((String) mongoComponent.get("morphofeat"));
+			if (mongoComponent.containsField("case")) component.setCase((String) mongoComponent.get("case"));
+			boolean isHead = mongoComponent.containsField("head") &&
+			    ((String) mongoComponent.get("head")).equals("yes");
+			component.addExternalRefs(this.externalRefsMongo2Naf(mongoComponent, naf));
+			term.addComponent(component, isHead);
+		    }
+		}
 		term.addExternalRefs(this.externalRefsMongo2Naf(mongoTerm, naf));
+		termIndex.put(term.getId(), term);
 	    }
 	}
 	return termIndex;
@@ -907,11 +981,9 @@ public class MongoNafManager implements Serializable {
 	String resource = (String) mongoExtRef.get("resource");
 	String reference = (String) mongoExtRef.get("reference");
 	ExternalRef extRef = naf.newExternalRef(resource, reference);
-	/*
 	if (mongoExtRef.containsField("confidence")) {
-	    extRef.setConfidence((Float) mongoExtRef.get("confidence"));
+	    extRef.setConfidence(new Float((Double) mongoExtRef.get("confidence")));
 	}
-	*/
 	if (mongoExtRef.containsField("external_reference"))
 	    extRef.setExternalRef(this.externalRefMongo2Naf((DBObject) mongoExtRef.get("external_reference"), naf));
 	return extRef;
