@@ -115,78 +115,80 @@ public class MongoNafManager implements Serializable {
 
     public void insertLayer(String docId, Integer sessionId, KAFDocument naf, String layerName)
     {
+	this.insertLayer(docId, sessionId, naf, layerName, null, null);
+    }
+
+    public void insertLayer(String docId, Integer sessionId, KAFDocument naf, String layerName, Integer paragraph)
+    {
+	this.insertLayer(docId, sessionId, naf, layerName, sentence, null);
+    }
+
+    public void insertLayer(String docId, Integer sessionId, KAFDocument naf, String layerName, Integer paragraph, Integer sentence)
+    {
 	if (layerName.equals("raw")) {
 	    String layer = naf.getRawText();
 	    this.insertRawText(layer, sessionId, docId);
 	}
 	else {
-	    Integer firstParagraph = naf.getFirstParagraph();
-	    Integer lastParagraph = firstParagraph + naf.getNumParagraphs() - 1;
-	    for (int para = firstParagraph; para <= lastParagraph; para++) {
-		List<Integer> sentences = naf.getSentsByParagraph(para);
-		for (Integer sent : sentences) {
-		    switch (layerName) {
-		    case "text":
-			List<WF> wfs = naf.getWFsBySent(sent);
-			if (wfs.size() > 0) {
-			    this.insertSentenceWFs(wfs, sessionId, docId, para, sent);
-			}
-			break;
-		    case "terms":
-			List<Term> terms = naf.getTermsBySent(sent);
-			if (terms.size() > 0) {
-			    this.insertSentenceTerms(terms, sessionId, docId, para, sent);
-			}
-			break;
-		    case "entities":
-			List<Entity> entities = naf.getEntitiesBySent(sent);
-			if (entities.size() > 0) {
-			    this.insertSentenceEntities(entities, sessionId, docId, para, sent);
-			}
-			break;
-		    case "deps":
-			List<Dep> deps = naf.getDepsBySent(sent);
-			if (deps.size() > 0) {
-			    this.insertSentenceDeps(deps, sessionId, docId, para, sent);
-			}
-			break;
-		    case "constituents":
-			List<Tree> constituents = naf.getConstituentsBySent(sent);
-			if (constituents.size() > 0) {
-			    this.insertSentenceConstituents(constituents, sessionId, docId, para, sent);
-			}
-			break;
-		    case "chunks":
-			List<Chunk> chunks = naf.getChunksBySent(sent);
-			if (chunks.size() > 0) {
-			    this.insertSentenceChunks(chunks, sessionId, docId, para, sent);
-			}
-			break;
-			/*
-		    case "coreferences":
-			List<Coref> corefs = naf.getCorefsBySent(sent);
-			if (corefs.size() > 0) {
-			    this.insertSentenceCorefs(corefs, sessionId, docId, para, sent);
-			}
-			break;
-			*/
-			/*
-		    case "opinions":
-			List<Opinion> opinions = naf.getOpinionsBySent(sent);
-			if (opinions.size() > 0) {
-			    this.insertSentenceOpinions(opinions, sessionId, docId, para, sent);
-			}
-			break;
-			*/
-		    case "srl":
-			List<Predicate> predicates = naf.getPredicatesBySent(sent);
-			if (predicates.size() > 0) {
-			    this.insertSentencePredicates(predicates, sessionId, docId, para, sent);
-			}
-			break;
-		    }
+	    List<DBObject> annDBObjs = new ArrayList<DBObject>();
+	    DBCollection docCollection = null;
+	    switch (layerName) {
+	    case "text":
+		for (WF annotation : naf.getWFs()) {
+		    annDBObjs.add(this.map(annotation));
 		}
+		docCollection = this.textColl;
+		break;
+	    case "terms":
+	        for (Term annotation : naf.getTerms()) {
+		    annDBObjs.add(this.map(annotation));
+		}
+		docCollection = this.termsColl;
+		break;
+	    case "entities":
+		for (Entity annotation : naf.getEntities()) {
+		    annDBObjs.add(this.map(annotation));
+		}
+		docCollection = this.entitiesColl;
+		break;
+	    case "deps":
+	        for (Dep annotation : naf.getDeps()) {
+		    annDBObjs.add(this.map(annotation));
+		}
+		docCollection = this.depsColl;
+		break;
+	    case "constituents":
+	        for (Tree annotation : naf.getConstituents()) {
+		    annDBObjs.add(this.map(annotation));
+		}
+		docCollection = this.constituentsColl;
+		break;
+	    case "chunks":
+	        for (Chunk annotation : naf.getChunks()) {
+		    annDBObjs.add(this.map(annotation));
+		}
+		docCollection = this.chunksColl;
+		break;
+	    case "coreferences":
+	        for (Coref annotation : naf.getCorefs()) {
+		    annDBObjs.add(this.map(annotation));
+		}
+		docCollection = this.corefsColl;
+		break;
+	    case "opinions":
+	        for (Opinion annotation : naf.getOpinions()) {
+		    annDBObjs.add(this.map(annotation));
+		}
+		docCollection = this.opinionsColl;
+		  break;
+	    case "srl":
+	        for (Predicate annotation : naf.getPredicates()) {
+		    annDBObjs.add(this.map(annotation));
+		}
+		docCollection = this.srlColl;
+		break;
 	    }
+	    this.insertDocument(annDBObjs, docCollection, sessionId, docId, paragraph, sentence);
 	}
     }
 
@@ -201,90 +203,25 @@ public class MongoNafManager implements Serializable {
 	}
     }
 
-    private void insertSentence(List<DBObject> annotations, DBCollection collection, Integer sessionId, String docId, Integer paragraph, Integer sentence) {
-	String id = docId + "_" + sessionId + "_" + paragraph + "_" + sentence;
-	BasicDBObject doc = new BasicDBObject("_id", id)
+    private void insertDocument(List<DBObject> annotations, DBCollection collection, Integer sessionId, String docId, Integer paragraph, Integer sentence) {
+	BasicDBObject doc = new BasicDBObject()
 	    .append("session_id", sessionId)
-	    .append("doc_id", docId)
-	    .append("paragraph", paragraph)
-	    .append("sentence", sentence)
-	    .append("annotations", annotations);
+	    .append("doc_id", docId);
+	String id = sessionId + "_" + docId;
+	if (paragraph != null) {
+	    id += "_" + paragraph;
+	    doc.append("paragraph", paragraph);
+	    if (sentence != null) {
+		id += "_" + sentence;
+		doc.append("sentence", sentence);
+	    }
+	}
+	doc.append("_id", id);
+	doc.append("annotations", annotations);
 	try {
 	    collection.insert(doc);
 	} catch(MongoException e) {
 	}
-    }
-	
-    private void insertSentenceWFs(List<WF> annotations, Integer sessionId, String docId, Integer paragraph, Integer sentence) {
-	List<DBObject> annDBObjs = new ArrayList<DBObject>();
-	for (WF annotation : annotations) {
-	    annDBObjs.add(this.map(annotation));
-	}
-	this.insertSentence(annDBObjs, this.textColl, sessionId, docId, paragraph, sentence);
-    }
-	
-    private void insertSentenceTerms(List<Term> annotations, Integer sessionId, String docId, Integer paragraph, Integer sentence) {
-	List<DBObject> annDBObjs = new ArrayList<DBObject>();
-	for (Term annotation : annotations) {
-	    annDBObjs.add(this.map(annotation));
-	}
-	this.insertSentence(annDBObjs, this.termsColl, sessionId, docId, paragraph, sentence);
-    }
-	
-    private void insertSentenceEntities(List<Entity> annotations, Integer sessionId, String docId, Integer paragraph, Integer sentence) {
-	List<DBObject> annDBObjs = new ArrayList<DBObject>();
-	for (Entity annotation : annotations) {
-	    annDBObjs.add(this.map(annotation));
-	}
-	this.insertSentence(annDBObjs, this.entitiesColl, sessionId, docId, paragraph, sentence);
-    }
-	
-    private void insertSentenceDeps(List<Dep> annotations, Integer sessionId, String docId, Integer paragraph, Integer sentence) {
-	List<DBObject> annDBObjs = new ArrayList<DBObject>();
-	for (Dep annotation : annotations) {
-	    annDBObjs.add(this.map(annotation));
-	}
-	this.insertSentence(annDBObjs, this.depsColl, sessionId, docId, paragraph, sentence);
-    }
-    
-    private void insertSentenceConstituents(List<Tree> annotations, Integer sessionId, String docId, Integer paragraph, Integer sentence) {
-	List<DBObject> annDBObjs = new ArrayList<DBObject>();
-	for (Tree annotation : annotations) {
-	    annDBObjs.add(this.map(annotation));
-	}
-	this.insertSentence(annDBObjs, this.constituentsColl, sessionId, docId, paragraph, sentence);
-    }
-	
-    private void insertSentenceChunks(List<Chunk> annotations, Integer sessionId, String docId, Integer paragraph, Integer sentence) {
-	List<DBObject> annDBObjs = new ArrayList<DBObject>();
-	for (Chunk annotation : annotations) {
-	    annDBObjs.add(this.map(annotation));
-	}
-	this.insertSentence(annDBObjs, this.chunksColl, sessionId, docId, paragraph, sentence);
-    }
-	
-    private void insertSentenceCorefs(List<Coref> annotations, Integer sessionId, String docId, Integer paragraph, Integer sentence) {
-	List<DBObject> annDBObjs = new ArrayList<DBObject>();
-	for (Coref annotation : annotations) {
-	    annDBObjs.add(this.map(annotation));
-	}
-	this.insertSentence(annDBObjs, this.corefsColl, sessionId, docId, paragraph, sentence);
-    }
-	
-    private void insertSentenceOpinions(List<Opinion> annotations, Integer sessionId, String docId, Integer paragraph, Integer sentence) {
-	List<DBObject> annDBObjs = new ArrayList<DBObject>();
-	for (Opinion annotation : annotations) {
-	    annDBObjs.add(this.map(annotation));
-	}
-	this.insertSentence(annDBObjs, this.opinionsColl, sessionId, docId, paragraph, sentence);
-    }
-	
-    private void insertSentencePredicates(List<Predicate> annotations, Integer sessionId, String docId, Integer paragraph, Integer sentence) {
-	List<DBObject> annDBObjs = new ArrayList<DBObject>();
-	for (Predicate annotation : annotations) {
-	    annDBObjs.add(this.map(annotation));
-	}
-	this.insertSentence(annDBObjs, this.srlColl, sessionId, docId, paragraph, sentence);
     }
 
     private DBObject map(WF wf) {
