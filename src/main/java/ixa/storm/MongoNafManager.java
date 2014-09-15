@@ -120,7 +120,7 @@ public class MongoNafManager implements Serializable {
 
     public void insertLayer(String docId, Integer sessionId, KAFDocument naf, String layerName, Integer paragraph)
     {
-	this.insertLayer(docId, sessionId, naf, layerName, sentence, null);
+	this.insertLayer(docId, sessionId, naf, layerName, paragraph, null);
     }
 
     public void insertLayer(String docId, Integer sessionId, KAFDocument naf, String layerName, Integer paragraph, Integer sentence)
@@ -504,74 +504,126 @@ public class MongoNafManager implements Serializable {
 	return extRefObj;
     }
 
-    public KAFDocument getNaf(Integer sessionId, String docId)
+    public KAFDocument getNaf(Integer sessionId, String docId) throws Exception
     {
 	return this.getNaf(sessionId, docId, "all", "D", null);
     }
 
-    public KAFDocument getNaf(Integer sessionId, String docId, String layerName)
+    public KAFDocument getNaf(Integer sessionId, String docId, String layerName) throws Exception
     {
 	return this.getNaf(sessionId, docId, layerName, "D", null);
     }
 
-    public KAFDocument getNaf(Integer sessionId, String docId, String layerName, String granularity, Integer part)
+    public KAFDocument getNaf(Integer sessionId, String docId, String layerName, String granularity, Integer part) throws Exception
     {
 	if (!this.validLayerName(layerName)) {
 	    return null;
 	}
 
 	KAFDocument naf = new KAFDocument("en", "v1");
-	HashMap<String, WF> wfIndex = null;
-	HashMap<String, Term> termIndex = null;
-	HashMap<String, Entity> entityIndex = null;
+	HashMap<String, WF> wfIndex = new HashMap<String, WF>();
+	HashMap<String, Term> termIndex = new HashMap<String, Term>();
+
+	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
+	DBObject nafObj;
+
+	/*
+	DBCursor cursor = this.chunksColl.find(query);
+	while (cursor.hasNext()) {
+	    List<DBObject> mongoChunks = (List<DBObject>) cursor.next().get("annotations");
+	}
+	*/
+
 	// Raw text
 	this.queryRawTextLayer(sessionId, docId, naf);
 	if (layerName.equals("raw")) return naf;
+
 	// Text
-	wfIndex = this.queryTextLayer(sessionId, docId, naf, granularity, part);
+	nafObj = this.textColl.findOne(query);
+	if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
+	for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+	    this.getWf(mongoAnnotation, naf, wfIndex);
+	}
 	if (layerName.equals("text")) return naf;
-	// Terms    
-	termIndex = this.queryTermsLayer(sessionId, docId, naf, wfIndex, granularity, part);
+
+	// Terms
+	nafObj = this.termsColl.findOne(query);
+	if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
+	for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+	    this.getTerm(mongoAnnotation, naf, termIndex, wfIndex);
+	}
 	if (layerName.equals("terms")) return naf;
+
 	// Entities
 	if (layerName.equals("entities")) {
-	    entityIndex = this.queryEntitiesLayer(sessionId, docId, naf, termIndex, granularity, part);
+	    nafObj = this.entitiesColl.findOne(query);
+	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
+	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		this.getEntity(mongoAnnotation, naf, termIndex);
+	    }
 	    return naf;
 	}
+
 	// Deps
 	if (layerName.equals("deps")) {
-	    this.queryDepsLayer(sessionId, docId, naf, termIndex, granularity, part);
+	    nafObj = this.depsColl.findOne(query);
+	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
+	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		this.getDep(mongoAnnotation, naf, termIndex);
+	    }
 	    return naf;
 	}
+
 	// Constituents
 	if (layerName.equals("constituents")) {
-	    this.queryConstituentsLayer(sessionId, docId, naf, termIndex, granularity, part);
+	    nafObj = this.constituentsColl.findOne(query);
+	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
+	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		this.getTree(mongoAnnotation, naf, termIndex);
+	    }
 	    return naf;
 	}
+
 	// Chunks
 	if (layerName.equals("chunks")) {
-	    this.queryChunksLayer(sessionId, docId, naf, termIndex, granularity, part);
+	    nafObj = this.chunksColl.findOne(query);
+	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
+	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		this.getChunk(mongoAnnotation, naf, termIndex);
+	    }
 	    return naf;
 	}
-	/*	
+	
 	// Coreferences
 	if (layerName.equals("coreferences")) {
-	    this.queryCoreferencesLayer(sessionId, docId, naf, termIndex, granularity, part);
+	    nafObj = this.corefsColl.findOne(query);
+	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
+	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		this.getCoref(mongoAnnotation, naf, termIndex);
+	    }
 	    return naf;
 	}
-	*/
-	/*
+
 	// Opinions
 	if (layerName.equals("opinions")) {
-	    this.queryOpinionsLayer(sessionId, docId, naf, termIndex, granularity, part);
+	    nafObj = this.opinionsColl.findOne(query);
+	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
+	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		this.getOpinion(mongoAnnotation, naf, termIndex);
+	    }
 	    return naf;
 	}
-	*/
+
 	// SRL
 	if (layerName.equals("srl")) {
-	    this.querySrlLayer(sessionId, docId, naf, termIndex, granularity, part);
+	    nafObj = this.srlColl.findOne(query);
+	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
+	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		this.getPredicate(mongoAnnotation, naf, termIndex);
+	    }
 	    return naf;
 	}
+
 	return naf;
     }
 
@@ -593,6 +645,215 @@ public class MongoNafManager implements Serializable {
 
     /* PRIVATE METHODS */
 
+    private void getWf(DBObject mongoWf, KAFDocument naf, HashMap<String, WF> wfIndex)
+    {
+	WF wf = naf.newWF((String) mongoWf.get("id"), (String) mongoWf.get("form"), (Integer) mongoWf.get("sent"));
+	if (mongoWf.containsField("para")) wf.setPara((Integer) mongoWf.get("para"));
+	if (mongoWf.containsField("page")) wf.setPage((Integer) mongoWf.get("page"));
+	if (mongoWf.containsField("offset")) wf.setOffset((Integer) mongoWf.get("offset"));
+	if (mongoWf.containsField("length")) wf.setLength((Integer) mongoWf.get("length"));
+	if (mongoWf.containsField("xpath")) wf.setXpath((String) mongoWf.get("xpath"));
+	wfIndex.put(wf.getId(), wf);
+    }
+
+    private void getTerm(DBObject mongoTerm, KAFDocument naf, HashMap<String, Term> termIndex, HashMap<String, WF> wfIndex)
+    {
+	BasicDBList wfIds = (BasicDBList) mongoTerm.get("anchor");
+	Span<WF> wfs = KAFDocument.newWFSpan();
+	for (int i = 0; i < wfIds.size(); i++) {
+	    wfs.addTarget(wfIndex.get((String) wfIds.get(i)));
+	}
+	Term term = naf.newTerm((String) mongoTerm.get("id"), wfs);
+	if (mongoTerm.containsField("type")) term.setType((String) mongoTerm.get("type"));
+	if (mongoTerm.containsField("lemma")) term.setLemma((String) mongoTerm.get("lemma"));
+	if (mongoTerm.containsField("pos")) term.setPos((String) mongoTerm.get("pos"));
+	if (mongoTerm.containsField("morphofeat")) term.setMorphofeat((String) mongoTerm.get("morphofeat"));
+	if (mongoTerm.containsField("case")) term.setCase((String) mongoTerm.get("case"));
+	if (mongoTerm.containsField("sentiment")) {
+	    DBObject mongoSentiment = (DBObject) mongoTerm.get("sentiment");
+	    Term.Sentiment sentiment = naf.newSentiment();
+	    if (mongoSentiment.containsField("resource"))
+		sentiment.setResource((String) mongoSentiment.get("resource"));
+	    if (mongoSentiment.containsField("polarity"))
+		sentiment.setPolarity((String) mongoSentiment.get("polarity"));
+	    if (mongoSentiment.containsField("strength"))
+		sentiment.setStrength((String) mongoSentiment.get("strength"));
+	    if (mongoSentiment.containsField("subjectivity"))
+		sentiment.setSubjectivity((String) mongoSentiment.get("subjectivity"));
+	    if (mongoSentiment.containsField("sentimentSemanticType"))
+		sentiment.setSentimentSemanticType((String) mongoSentiment.get("sentimentSemanticType"));
+	    if (mongoSentiment.containsField("sentimentModifier"))
+		sentiment.setSentimentModifier((String) mongoSentiment.get("sentimentModifier"));
+	    if (mongoSentiment.containsField("sentimentMarker"))
+		sentiment.setSentimentMarker((String) mongoSentiment.get("sentimentMarker"));
+	    if (mongoSentiment.containsField("sentimentProductFeature"))
+		sentiment.setSentimentProductFeature((String) mongoSentiment.get("sentimentProductFeature"));
+	    term.setSentiment(sentiment);
+	}
+	if (mongoTerm.containsField("components")) {
+	    List<DBObject> mongoComponents = (List<DBObject>) mongoTerm.get("components");
+	    for (DBObject mongoComponent : mongoComponents) {
+		Term component = naf.newTerm((String) mongoComponent.get("id"), naf.newWFSpan(), true);
+		if (mongoComponent.containsField("type")) component.setType((String) mongoComponent.get("type"));
+		if (mongoComponent.containsField("lemma")) component.setLemma((String) mongoComponent.get("lemma"));
+		if (mongoComponent.containsField("pos")) component.setPos((String) mongoComponent.get("pos"));
+		if (mongoComponent.containsField("morphofeat")) component.setMorphofeat((String) mongoComponent.get("morphofeat"));
+		if (mongoComponent.containsField("case")) component.setCase((String) mongoComponent.get("case"));
+		boolean isHead = mongoComponent.containsField("head") &&
+		    ((String) mongoComponent.get("head")).equals("yes");
+		component.addExternalRefs(this.externalRefsMongo2Naf(mongoComponent, naf));
+		term.addComponent(component, isHead);
+	    }
+	}
+	term.addExternalRefs(this.externalRefsMongo2Naf(mongoTerm, naf));
+	termIndex.put(term.getId(), term);	
+    }
+
+    private void getEntity(DBObject mongoEntity, KAFDocument naf, HashMap<String, Term> termIndex)
+    {
+	Span<Term> terms = this.termSpanMongo2Naf(mongoEntity, termIndex);
+	List<Span<Term>> termSpans = new ArrayList<Span<Term>>();
+	termSpans.add(terms);
+	Entity entity = naf.newEntity((String) mongoEntity.get("id"), termSpans);
+	if (mongoEntity.containsField("type")) entity.setType((String) mongoEntity.get("type"));
+	entity.addExternalRefs(this.externalRefsMongo2Naf(mongoEntity, naf));
+    }
+
+    private void getDep(DBObject mongoDep, KAFDocument naf, HashMap<String, Term> termIndex)
+    {
+	Term from = termIndex.get((String) mongoDep.get("from"));
+	Term to = termIndex.get((String) mongoDep.get("to"));
+	String rfunc = (String) mongoDep.get("rfunc");
+	Dep dep = naf.newDep(from, to, rfunc);
+	if (mongoDep.containsField("case")) {
+	    dep.setCase((String) mongoDep.get("case"));
+	}	
+    }
+
+    private void getTree(DBObject mongoTree, KAFDocument naf, HashMap<String, Term> termIndex)
+    {
+	HashMap<String, TreeNode> treeNodes = new HashMap<String, TreeNode>();
+	HashMap<String, Boolean> areRoot = new HashMap<String, Boolean>();
+	// Terminals
+	for (DBObject mongoTerminal : (List<DBObject>) mongoTree.get("terminals")) {
+	    Span<Term> terms = this.termSpanMongo2Naf(mongoTerminal, termIndex);
+	    String id = (String) mongoTerminal.get("id");
+	    treeNodes.put(id, naf.newTerminal(id, terms));
+	    areRoot.put(id, true);
+	}
+	// NonTerminals
+	for (DBObject mongoNonTerminal : (List<DBObject>) mongoTree.get("non_terminals")) {
+	    String label = (String) mongoNonTerminal.get("label");
+	    String id = (String) mongoNonTerminal.get("id");
+	    treeNodes.put(id, naf.newNonTerminal(id, label));
+	    areRoot.put(id, true);
+	}
+	// Edges
+	for (DBObject mongoEdge : (List<DBObject>) mongoTree.get("edges")) {
+	    String id = (String) mongoEdge.get("id");
+	    TreeNode parentNode = treeNodes.get((String) mongoEdge.get("to"));
+	    TreeNode childNode = treeNodes.get((String) mongoEdge.get("from"));
+	    Boolean isHead = mongoEdge.containsField("head");
+	    try {
+		((NonTerminal) parentNode).addChild(childNode);
+	    } catch (Exception e) {}
+	    areRoot.put((String) mongoEdge.get("from"), false);
+	    childNode.setEdgeId(id);
+	    if (isHead) ((NonTerminal) childNode).setHead(true);
+	}
+	// Constituent objects
+	for (Map.Entry<String, Boolean> isRoot : areRoot.entrySet()) {
+	    if (isRoot.getValue()) {
+		TreeNode rootNode = treeNodes.get(isRoot.getKey());
+		naf.newConstituent(rootNode);
+	    }
+	}	
+    }
+
+    private void getChunk(DBObject mongoChunk, KAFDocument naf, HashMap<String, Term> termIndex)
+    {
+	Span<Term> terms = this.termSpanMongo2Naf(mongoChunk, termIndex);
+	String id = (String) mongoChunk.get("id");
+	Chunk chunk = naf.newChunk(id, terms);
+	if (mongoChunk.containsField("phrase")) {
+	    chunk.setPhrase((String) mongoChunk.get("phrase"));
+	}
+	if (mongoChunk.containsField("case")) {
+	    chunk.setCase((String) mongoChunk.get("case"));
+	}	
+    }
+
+    private void getCoref(DBObject mongoCoref, KAFDocument naf, HashMap<String, Term> termIndex)
+    {
+	List<BasicDBList> mentionObjs = (List<BasicDBList>) mongoCoref.get("anchor");
+	List<Span<Term>> mentions = new ArrayList<Span<Term>>();
+	for (BasicDBList termIds : mentionObjs) {
+	    Span<Term> terms = KAFDocument.newTermSpan();
+	    for (int i = 0; i < termIds.size(); i++) {
+		String tid = (String) termIds.get(i);
+		Term term = termIndex.get(tid);		   
+		terms.addTarget(term);
+	    }
+	    mentions.add(terms);
+	}
+	String id = (String) mongoCoref.get("id");
+	Coref coref = naf.newCoref(id, mentions);	
+    }
+
+    private void getOpinion(DBObject mongoOpinion, KAFDocument naf, HashMap<String, Term> termIndex)
+    {
+	DBObject mongoOpHolder = (DBObject) mongoOpinion.get("opinion_holder");
+	DBObject mongoOpTarget = (DBObject) mongoOpinion.get("opinion_target");
+	DBObject mongoOpExpression = (DBObject) mongoOpinion.get("opinion_expression");
+	String id = (String) mongoOpinion.get("id");
+	Opinion opinion = naf.newOpinion(id);
+	// Opinion Holder
+	Span<Term> terms = this.termSpanMongo2Naf(mongoOpHolder, termIndex);
+	Opinion.OpinionHolder opHolder = opinion.createOpinionHolder(terms);
+	if (mongoOpHolder.containsField("type")) {
+	    opHolder.setType((String) mongoOpHolder.get("type"));
+	}
+	// Opinion Target
+	terms = this.termSpanMongo2Naf(mongoOpTarget, termIndex);
+	Opinion.OpinionTarget opTarget = opinion.createOpinionTarget(terms);
+	// Opinion Expression
+	terms = this.termSpanMongo2Naf(mongoOpExpression, termIndex);
+	Opinion.OpinionExpression opExpression = opinion.createOpinionExpression(terms);
+	if (mongoOpExpression.containsField("polarity"))
+	    opExpression.setPolarity((String) mongoOpExpression.get("polarity"));
+	if (mongoOpExpression.containsField("strength"))
+	    opExpression.setStrength((String) mongoOpExpression.get("strength"));
+	if (mongoOpExpression.containsField("subjectivity"))
+	    opExpression.setSubjectivity((String) mongoOpExpression.get("subjectivity"));
+	if (mongoOpExpression.containsField("sentiment_semantic_type"))
+	    opExpression.setSentimentSemanticType((String) mongoOpExpression.get("sentiment_semantic_type"));
+	if (mongoOpExpression.containsField("sentiment_product_feature"))
+	    opExpression.setSentimentProductFeature((String) mongoOpExpression.get("sentiment_product_feature"));	
+    }
+
+    private void getPredicate(DBObject mongoPredicate, KAFDocument naf, HashMap<String, Term> termIndex)
+    {
+	String id = (String) mongoPredicate.get("id");
+	BasicDBList termIds = (BasicDBList) mongoPredicate.get("anchor");
+	Span<Term> terms = this.termSpanMongo2Naf(mongoPredicate, termIndex);
+	Predicate predicate = naf.newPredicate(id, terms);
+	if (mongoPredicate.containsField("uri")) {
+	    predicate.setUri((String) mongoPredicate.get("uri"));
+	}
+	if (mongoPredicate.containsField("confidence")) {
+	    predicate.setConfidence((float) mongoPredicate.get("confidence"));
+	}
+	for (DBObject mongoRole : (List<DBObject>) mongoPredicate.get("roles")) {
+	    String roleId = (String) mongoRole.get("id");
+	    String semRole = (String) mongoRole.get("sem_role");
+	    terms = this.termSpanMongo2Naf(mongoPredicate, termIndex);
+	    Predicate.Role role = naf.newRole(roleId, predicate, semRole, terms);
+	    role.addExternalRefs(this.externalRefsMongo2Naf(mongoRole, naf));
+	    predicate.addRole(role);
+	}
+	predicate.addExternalRefs(this.externalRefsMongo2Naf(mongoPredicate, naf));	
+    }
+
     private void queryRawTextLayer(Integer sessionId, String docId, KAFDocument naf)
     {
 	String id = docId + "_" + sessionId;
@@ -604,22 +865,15 @@ public class MongoNafManager implements Serializable {
 	}
     }
 
+    /*
     private HashMap<String, WF> queryTextLayer(Integer sessionId, String docId, KAFDocument naf, String granularity, Integer part)
     {
 	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
-	DBCursor cursor = this.textColl.find(query);
+	DBObject nafObj = this.textColl.findOne(query);
+	List<DBObject> mongoWfs = (List<DBObject>) nafObj.get("annotations");
 	HashMap<String, WF> wfIndex = new HashMap<String, WF>();
-	while (cursor.hasNext()) {
-	    List<DBObject> mongoWfs = (List<DBObject>) cursor.next().get("annotations");
-	    for (DBObject mongoWf : mongoWfs) {
-		WF wf = naf.newWF((String) mongoWf.get("id"), (String) mongoWf.get("form"), (Integer) mongoWf.get("sent"));
-		if (mongoWf.containsField("para")) wf.setPara((Integer) mongoWf.get("para"));
-		if (mongoWf.containsField("page")) wf.setPage((Integer) mongoWf.get("page"));
-		if (mongoWf.containsField("offset")) wf.setOffset((Integer) mongoWf.get("offset"));
-		if (mongoWf.containsField("length")) wf.setLength((Integer) mongoWf.get("length"));
-		if (mongoWf.containsField("xpath")) wf.setXpath((String) mongoWf.get("xpath"));
-		wfIndex.put(wf.getId(), wf);
-	    }
+	for (DBObject mongoWf : mongoWfs) {
+
 	}
 	return wfIndex;
     }
@@ -631,55 +885,7 @@ public class MongoNafManager implements Serializable {
 	while (cursor.hasNext()) {
 	    List<DBObject> mongoTerms = (List<DBObject>) cursor.next().get("annotations");
 	    for (DBObject mongoTerm : mongoTerms) {
-		BasicDBList wfIds = (BasicDBList) mongoTerm.get("anchor");
-		Span<WF> wfs = KAFDocument.newWFSpan();
-		for (int i = 0; i < wfIds.size(); i++) {
-		    wfs.addTarget(wfIndex.get((String) wfIds.get(i)));
-		}
-		Term term = naf.newTerm((String) mongoTerm.get("id"), wfs);
-		if (mongoTerm.containsField("type")) term.setType((String) mongoTerm.get("type"));
-		if (mongoTerm.containsField("lemma")) term.setLemma((String) mongoTerm.get("lemma"));
-		if (mongoTerm.containsField("pos")) term.setPos((String) mongoTerm.get("pos"));
-		if (mongoTerm.containsField("morphofeat")) term.setMorphofeat((String) mongoTerm.get("morphofeat"));
-		if (mongoTerm.containsField("case")) term.setCase((String) mongoTerm.get("case"));
-		if (mongoTerm.containsField("sentiment")) {
-		    DBObject mongoSentiment = (DBObject) mongoTerm.get("sentiment");
-		    Term.Sentiment sentiment = naf.newSentiment();
-		    if (mongoSentiment.containsField("resource"))
-			sentiment.setResource((String) mongoSentiment.get("resource"));
-		    if (mongoSentiment.containsField("polarity"))
-			sentiment.setPolarity((String) mongoSentiment.get("polarity"));
-		    if (mongoSentiment.containsField("strength"))
-			sentiment.setStrength((String) mongoSentiment.get("strength"));
-		    if (mongoSentiment.containsField("subjectivity"))
-			sentiment.setSubjectivity((String) mongoSentiment.get("subjectivity"));
-		    if (mongoSentiment.containsField("sentimentSemanticType"))
-			sentiment.setSentimentSemanticType((String) mongoSentiment.get("sentimentSemanticType"));
-		    if (mongoSentiment.containsField("sentimentModifier"))
-			sentiment.setSentimentModifier((String) mongoSentiment.get("sentimentModifier"));
-		    if (mongoSentiment.containsField("sentimentMarker"))
-			sentiment.setSentimentMarker((String) mongoSentiment.get("sentimentMarker"));
-		    if (mongoSentiment.containsField("sentimentProductFeature"))
-			sentiment.setSentimentProductFeature((String) mongoSentiment.get("sentimentProductFeature"));
-		    term.setSentiment(sentiment);
-		}
-		if (mongoTerm.containsField("components")) {
-		    List<DBObject> mongoComponents = (List<DBObject>) mongoTerm.get("components");
-		    for (DBObject mongoComponent : mongoComponents) {
-			Term component = naf.newTerm((String) mongoComponent.get("id"), naf.newWFSpan(), true);
-			if (mongoComponent.containsField("type")) component.setType((String) mongoComponent.get("type"));
-			if (mongoComponent.containsField("lemma")) component.setLemma((String) mongoComponent.get("lemma"));
-			if (mongoComponent.containsField("pos")) component.setPos((String) mongoComponent.get("pos"));
-			if (mongoComponent.containsField("morphofeat")) component.setMorphofeat((String) mongoComponent.get("morphofeat"));
-			if (mongoComponent.containsField("case")) component.setCase((String) mongoComponent.get("case"));
-			boolean isHead = mongoComponent.containsField("head") &&
-			    ((String) mongoComponent.get("head")).equals("yes");
-			component.addExternalRefs(this.externalRefsMongo2Naf(mongoComponent, naf));
-			term.addComponent(component, isHead);
-		    }
-		}
-		term.addExternalRefs(this.externalRefsMongo2Naf(mongoTerm, naf));
-		termIndex.put(term.getId(), term);
+
 	    }
 	}
 	return termIndex;
@@ -692,13 +898,7 @@ public class MongoNafManager implements Serializable {
 	while (cursor.hasNext()) {
 	    List<DBObject> mongoEntities = (List<DBObject>) cursor.next().get("annotations");
 	    for (DBObject mongoEntity : mongoEntities) {
-		Span<Term> terms = this.termSpanMongo2Naf(mongoEntity, termIndex);
-		List<Span<Term>> termSpans = new ArrayList<Span<Term>>();
-		termSpans.add(terms);
-		Entity entity = naf.newEntity((String) mongoEntity.get("id"), termSpans);
-		if (mongoEntity.containsField("type")) entity.setType((String) mongoEntity.get("type"));
-		entity.addExternalRefs(this.externalRefsMongo2Naf(mongoEntity, naf));
-		entityIndex.put(entity.getId(), entity);
+
 	    }
 	}
 	return entityIndex;
@@ -710,13 +910,7 @@ public class MongoNafManager implements Serializable {
 	while (cursor.hasNext()) {
 	    List<DBObject> mongoDeps = (List<DBObject>) cursor.next().get("annotations");
 	    for (DBObject mongoDep : mongoDeps) {
-		Term from = termIndex.get((String) mongoDep.get("from"));
-		Term to = termIndex.get((String) mongoDep.get("to"));
-		String rfunc = (String) mongoDep.get("rfunc");
-		Dep dep = naf.newDep(from, to, rfunc);
-		if (mongoDep.containsField("case")) {
-		    dep.setCase((String) mongoDep.get("case"));
-		}
+
 	    }
 	}
     }
@@ -727,42 +921,7 @@ public class MongoNafManager implements Serializable {
 	while (cursor.hasNext()) {
 	    List<DBObject> mongoTrees = (List<DBObject>) cursor.next().get("annotations");
 	    for (DBObject mongoTree : mongoTrees) {
-		HashMap<String, TreeNode> treeNodes = new HashMap<String, TreeNode>();
-		HashMap<String, Boolean> areRoot = new HashMap<String, Boolean>();
-		// Terminals
-		for (DBObject mongoTerminal : (List<DBObject>) mongoTree.get("terminals")) {
-		    Span<Term> terms = this.termSpanMongo2Naf(mongoTerminal, termIndex);
-		    String id = (String) mongoTerminal.get("id");
-		    treeNodes.put(id, naf.newTerminal(id, terms));
-		    areRoot.put(id, true);
-		}
-		// NonTerminals
-		for (DBObject mongoNonTerminal : (List<DBObject>) mongoTree.get("non_terminals")) {
-		    String label = (String) mongoNonTerminal.get("label");
-		    String id = (String) mongoNonTerminal.get("id");
-		    treeNodes.put(id, naf.newNonTerminal(id, label));
-		    areRoot.put(id, true);
-		}
-		// Edges
-		for (DBObject mongoEdge : (List<DBObject>) mongoTree.get("edges")) {
-		    String id = (String) mongoEdge.get("id");
-		    TreeNode parentNode = treeNodes.get((String) mongoEdge.get("to"));
-		    TreeNode childNode = treeNodes.get((String) mongoEdge.get("from"));
-		    Boolean isHead = mongoEdge.containsField("head");
-		    try {
-			((NonTerminal) parentNode).addChild(childNode);
-		    } catch (Exception e) {}
-		    areRoot.put((String) mongoEdge.get("from"), false);
-		    childNode.setEdgeId(id);
-		    if (isHead) ((NonTerminal) childNode).setHead(true);
-		}
-		// Constituent objects
-		for (Map.Entry<String, Boolean> isRoot : areRoot.entrySet()) {
-		    if (isRoot.getValue()) {
-			TreeNode rootNode = treeNodes.get(isRoot.getKey());
-			naf.newConstituent(rootNode);
-		    }
-		}
+
 	    }
 	}
     }
@@ -773,15 +932,7 @@ public class MongoNafManager implements Serializable {
 	while (cursor.hasNext()) {
 	    List<DBObject> mongoChunks = (List<DBObject>) cursor.next().get("annotations");
 	    for (DBObject mongoChunk : mongoChunks) {
-		Span<Term> terms = this.termSpanMongo2Naf(mongoChunk, termIndex);
-		String id = (String) mongoChunk.get("id");
-		Chunk chunk = naf.newChunk(id, terms);
-		if (mongoChunk.containsField("phrase")) {
-		    chunk.setPhrase((String) mongoChunk.get("phrase"));
-		}
-		if (mongoChunk.containsField("case")) {
-		    chunk.setCase((String) mongoChunk.get("case"));
-		}
+
 	    }
 	}
     }
@@ -793,23 +944,11 @@ public class MongoNafManager implements Serializable {
 	while (cursor.hasNext()) {
 	    List<DBObject> mongoCorefs = (List<DBObject>) cursor.next().get("annotations");
 	    for (DBObject mongoCoref : mongoCorefs) {
-		BasicDBList mentionObjs = (BasicDBList) mongoCoref.get("anchor");
-		List<Span<Term>> mentions = new ArrayList<Span<Term>>();
-		for (BasicDBList termIds : mentionObjs) {
-		    Span<Term> terms = KAFDocument.newTermSpan();
-		    for (int i = 0; i < termIds.size(); i++) {
-			String tid = (String) termIds.get(i);
-			Term term = termIndex.get(tid);		   
-			terms.addTarget(term);
-		    }
-		    mentions.add(terms);
-		}
-		String id = (String) mongoCoref.get("id");
-		Coref coref = naf.newCoref(id, mentions);
+
 	    }
 	}
     }
-    */
+    
 
     private void queryOpinionsLayer(Integer sessionId, String docId, KAFDocument naf, HashMap<String, Term> termIndex, String granularity, Integer part) {
 	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
@@ -817,33 +956,7 @@ public class MongoNafManager implements Serializable {
 	while (cursor.hasNext()) {
 	    List<DBObject> mongoOpinions = (List<DBObject>) cursor.next().get("annotations");
 	    for (DBObject mongoOpinion : mongoOpinions) {
-		DBObject mongoOpHolder = (DBObject) mongoOpinion.get("opinion_holder");
-		DBObject mongoOpTarget = (DBObject) mongoOpinion.get("opinion_target");
-		DBObject mongoOpExpression = (DBObject) mongoOpinion.get("opinion_expression");
-		String id = (String) mongoOpinion.get("id");
-		Opinion opinion = naf.newOpinion(id);
-		// Opinion Holder
-		Span<Term> terms = this.termSpanMongo2Naf(mongoOpHolder, termIndex);
-		Opinion.OpinionHolder opHolder = opinion.createOpinionHolder(terms);
-		if (mongoOpHolder.containsField("type")) {
-		    opHolder.setType((String) mongoOpHolder.get("type"));
-		}
-		// Opinion Target
-		terms = this.termSpanMongo2Naf(mongoOpTarget, termIndex);
-		Opinion.OpinionTarget opTarget = opinion.createOpinionTarget(terms);
-		// Opinion Expression
-		terms = this.termSpanMongo2Naf(mongoOpExpression, termIndex);
-		Opinion.OpinionExpression opExpression = opinion.createOpinionExpression(terms);
-		if (mongoOpExpression.containsField("polarity"))
-		    opExpression.setPolarity((String) mongoOpExpression.get("polarity"));
-		if (mongoOpExpression.containsField("strength"))
-		    opExpression.setStrength((String) mongoOpExpression.get("strength"));
-		if (mongoOpExpression.containsField("subjectivity"))
-		    opExpression.setSubjectivity((String) mongoOpExpression.get("subjectivity"));
-		if (mongoOpExpression.containsField("sentiment_semantic_type"))
-		    opExpression.setSentimentSemanticType((String) mongoOpExpression.get("sentiment_semantic_type"));
-		if (mongoOpExpression.containsField("sentiment_product_feature"))
-		    opExpression.setSentimentProductFeature((String) mongoOpExpression.get("sentiment_product_feature"));
+
 	    }
 	}
     }
@@ -854,28 +967,11 @@ public class MongoNafManager implements Serializable {
 	while (cursor.hasNext()) {
 	    List<DBObject> mongoPredicates = (List<DBObject>) cursor.next().get("annotations");
 	    for (DBObject mongoPredicate : mongoPredicates) {
-		String id = (String) mongoPredicate.get("id");
-		BasicDBList termIds = (BasicDBList) mongoPredicate.get("anchor");
-		Span<Term> terms = this.termSpanMongo2Naf(mongoPredicate, termIndex);
-		Predicate predicate = naf.newPredicate(id, terms);
-		if (mongoPredicate.containsField("uri")) {
-		    predicate.setUri((String) mongoPredicate.get("uri"));
-		}
-		if (mongoPredicate.containsField("confidence")) {
-		    predicate.setConfidence((float) mongoPredicate.get("confidence"));
-		}
-		for (DBObject mongoRole : (List<DBObject>) mongoPredicate.get("roles")) {
-		    String roleId = (String) mongoRole.get("id");
-		    String semRole = (String) mongoRole.get("sem_role");
-		    terms = this.termSpanMongo2Naf(mongoPredicate, termIndex);
-		    Predicate.Role role = naf.newRole(roleId, predicate, semRole, terms);
-		    role.addExternalRefs(this.externalRefsMongo2Naf(mongoRole, naf));
-		    predicate.addRole(role);
-		}
-		predicate.addExternalRefs(this.externalRefsMongo2Naf(mongoPredicate, naf));
+
 	    }
 	}
     }
+    */
 
     private BasicDBObject createQuery(Integer sessionId, String docId, String granularity, Integer part)
     {
