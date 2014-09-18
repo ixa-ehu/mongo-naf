@@ -113,6 +113,30 @@ public class MongoNafManager implements Serializable {
 	this.srlColl.remove(new BasicDBObject(idField, docId)); 
     }
 
+    public void insertNafDocument(String docId, Integer sessionId, KAFDocument naf)
+    {
+	this.insertNafDocument(docId, sessionId, naf, null, null);
+    }
+	
+    public void insertNafDocument(String docId, Integer sessionId, KAFDocument naf, Integer paragraph)
+    {
+	this.insertNafDocument(docId, sessionId, naf, paragraph, null);
+    }
+
+    public void insertNafDocument(String docId, Integer sessionId, KAFDocument naf, Integer paragraph, Integer sentence)
+    {
+	this.insertLayer(docId, sessionId, naf, "raw", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "text", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "terms", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "entities", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "deps", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "constituents", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "chunks", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "coreferences", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "opinions", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "srl", paragraph, sentence);
+    }
+
     public void insertLayer(String docId, Integer sessionId, KAFDocument naf, String layerName)
     {
 	this.insertLayer(docId, sessionId, naf, layerName, null, null);
@@ -188,7 +212,9 @@ public class MongoNafManager implements Serializable {
 		docCollection = this.srlColl;
 		break;
 	    }
-	    this.insertDocument(annDBObjs, docCollection, sessionId, docId, paragraph, sentence);
+	    if (annDBObjs.size() > 0) {
+		this.insertDocument(annDBObjs, docCollection, sessionId, docId, paragraph, sentence);
+	    }
 	}
     }
 
@@ -527,12 +553,6 @@ public class MongoNafManager implements Serializable {
 	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
 	DBObject nafObj;
 
-	/*
-	DBCursor cursor = this.chunksColl.find(query);
-	while (cursor.hasNext()) {
-	    List<DBObject> mongoChunks = (List<DBObject>) cursor.next().get("annotations");
-	}
-	*/
 
 	// Raw text
 	this.queryRawTextLayer(sessionId, docId, naf);
@@ -555,73 +575,79 @@ public class MongoNafManager implements Serializable {
 	if (layerName.equals("terms")) return naf;
 
 	// Entities
-	if (layerName.equals("entities")) {
+	if (layerName.equals("entities") || layerName.equals("all")) {
 	    nafObj = this.entitiesColl.findOne(query);
 	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
 	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		this.getEntity(mongoAnnotation, naf, termIndex);
 	    }
-	    return naf;
+	    if (layerName.equals("entities")) return naf;
 	}
 
 	// Deps
-	if (layerName.equals("deps")) {
+	if (layerName.equals("deps") || layerName.equals("all")) {
 	    nafObj = this.depsColl.findOne(query);
-	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
-	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-		this.getDep(mongoAnnotation, naf, termIndex);
+	    if (nafObj != null) { 
+		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		    this.getDep(mongoAnnotation, naf, termIndex);
+		}
 	    }
-	    return naf;
+	    if (layerName.equals("deps")) return naf;
 	}
 
 	// Constituents
-	if (layerName.equals("constituents")) {
+	if (layerName.equals("constituents") || layerName.equals("all")) {
 	    nafObj = this.constituentsColl.findOne(query);
-	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
-	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-		this.getTree(mongoAnnotation, naf, termIndex);
+	    if (nafObj != null) { 
+		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		    this.getTree(mongoAnnotation, naf, termIndex);
+		}
 	    }
-	    return naf;
+	    if (layerName.equals("constituents")) return naf;
 	}
 
 	// Chunks
-	if (layerName.equals("chunks")) {
+	if (layerName.equals("chunks") || layerName.equals("all")) {
 	    nafObj = this.chunksColl.findOne(query);
-	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
-	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-		this.getChunk(mongoAnnotation, naf, termIndex);
+	    if (nafObj != null) { 
+		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		    this.getChunk(mongoAnnotation, naf, termIndex);
+		}
 	    }
-	    return naf;
+	    if (layerName.equals("chunks")) return naf;
 	}
 	
 	// Coreferences
-	if (layerName.equals("coreferences")) {
+	if (layerName.equals("coreferences") || layerName.equals("all")) {
 	    nafObj = this.corefsColl.findOne(query);
-	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
-	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-		this.getCoref(mongoAnnotation, naf, termIndex);
+	    if (nafObj != null) { 
+		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		    this.getCoref(mongoAnnotation, naf, termIndex);
+		}
 	    }
-	    return naf;
+	    if (layerName.equals("coreferences")) return naf;
 	}
 
 	// Opinions
-	if (layerName.equals("opinions")) {
+	if (layerName.equals("opinions") || layerName.equals("all")) {
 	    nafObj = this.opinionsColl.findOne(query);
-	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
-	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-		this.getOpinion(mongoAnnotation, naf, termIndex);
+	    if (nafObj != null) { 
+		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		    this.getOpinion(mongoAnnotation, naf, termIndex);
+		}
 	    }
-	    return naf;
+	    if (layerName.equals("opinions")) return naf;
 	}
 
 	// SRL
-	if (layerName.equals("srl")) {
+	if (layerName.equals("srl") || layerName.equals("all")) {
 	    nafObj = this.srlColl.findOne(query);
-	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
-	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-		this.getPredicate(mongoAnnotation, naf, termIndex);
+	    if (nafObj != null) { 
+		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		    this.getPredicate(mongoAnnotation, naf, termIndex);
+		}
 	    }
-	    return naf;
+	    if (layerName.equals("srl")) return naf;
 	}
 
 	return naf;
