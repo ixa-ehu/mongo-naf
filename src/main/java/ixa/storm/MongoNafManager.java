@@ -62,7 +62,7 @@ public class MongoNafManager implements Serializable {
 	this.termsColl = this.db.getCollection("terms");
 	this.entitiesColl = this.db.getCollection("entities");
 	this.depsColl = this.db.getCollection("deps");
-	this.constituentsColl = this.db.getCollection("constituents");
+	this.constituentsColl = this.db.getCollection("constituency");
 	this.chunksColl = this.db.getCollection("chunks");
 	this.corefsColl = this.db.getCollection("coreferences");
 	this.opinionsColl = this.db.getCollection("opinions");
@@ -130,7 +130,7 @@ public class MongoNafManager implements Serializable {
 	this.insertLayer(docId, sessionId, naf, "terms", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "entities", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "deps", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "constituents", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "constituency", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "chunks", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "coreferences", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "opinions", paragraph, sentence);
@@ -149,6 +149,8 @@ public class MongoNafManager implements Serializable {
 
     public void insertLayer(String docId, Integer sessionId, KAFDocument naf, String layerName, Integer paragraph, Integer sentence)
     {
+	//	System.out.println("Insert: " + layerName);
+
 	if (layerName.equals("raw")) {
 	    String layer = naf.getRawText();
 	    this.insertRawText(layer, sessionId, docId);
@@ -156,61 +158,59 @@ public class MongoNafManager implements Serializable {
 	else {
 	    List<DBObject> annDBObjs = new ArrayList<DBObject>();
 	    DBCollection docCollection = null;
-	    switch (layerName) {
-	    case "text":
+	    if (layerName.equals("text") || layerName.equals("all")) {
 		for (WF annotation : naf.getWFs()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.textColl;
-		break;
-	    case "terms":
+	    }
+	    if (layerName.equals("terms") || layerName.equals("all")) {
 	        for (Term annotation : naf.getTerms()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.termsColl;
-		break;
-	    case "entities":
+	    }
+	    if (layerName.equals("entities") || layerName.equals("all")) {
 		for (Entity annotation : naf.getEntities()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.entitiesColl;
-		break;
-	    case "deps":
+	    }
+	    if (layerName.equals("deps") || layerName.equals("all")) {
 	        for (Dep annotation : naf.getDeps()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.depsColl;
-		break;
-	    case "constituents":
+	    }
+	    if (layerName.equals("constituency") || layerName.equals("all")) {
 	        for (Tree annotation : naf.getConstituents()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.constituentsColl;
-		break;
-	    case "chunks":
+	    }
+	    if (layerName.equals("chunks") || layerName.equals("all")) {
 	        for (Chunk annotation : naf.getChunks()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.chunksColl;
-		break;
-	    case "coreferences":
+	    }
+	    if (layerName.equals("coreferences") || layerName.equals("all")) {
 	        for (Coref annotation : naf.getCorefs()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.corefsColl;
-		break;
-	    case "opinions":
+	    }
+	    if (layerName.equals("opinions") || layerName.equals("all")) {
 	        for (Opinion annotation : naf.getOpinions()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.opinionsColl;
-		  break;
-	    case "srl":
+	    }
+	    if (layerName.equals("srl") || layerName.equals("all")) { 
 	        for (Predicate annotation : naf.getPredicates()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.srlColl;
-		break;
 	    }
 	    if (annDBObjs.size() > 0) {
 		this.insertDocument(annDBObjs, docCollection, sessionId, docId, paragraph, sentence);
@@ -222,6 +222,8 @@ public class MongoNafManager implements Serializable {
     {
 	String id = docId + "_" + sessionId;
 	DBObject doc = new BasicDBObject("_id", id)
+	    .append("session_id", sessionId)
+	    .append("doc_id", docId)
 	    .append("raw", rawText);
 	try {
 	    this.rawColl.save(doc);
@@ -245,8 +247,9 @@ public class MongoNafManager implements Serializable {
 	doc.append("_id", id);
 	doc.append("annotations", annotations);
 	try {
-	    collection.insert(doc);
+	    collection.save(doc);
 	} catch(MongoException e) {
+	    System.out.println("Error storing a layer.");
 	}
     }
 
@@ -431,37 +434,43 @@ public class MongoNafManager implements Serializable {
 	BasicDBObject opinionObj = new BasicDBObject("id", opinion.getId());
         // OpinionHolder
 	Opinion.OpinionHolder opHolder = opinion.getOpinionHolder();
-	BasicDBObject opHolderObj = new BasicDBObject();
-	if (opHolder.hasType()) opHolderObj.append("type", opHolder.getType());
-	List<String> anchor = new ArrayList<String>();
-	for (Term term : opHolder.getSpan().getTargets()) {
-	    anchor.add(term.getId());
+	if (opHolder != null) {
+	    BasicDBObject opHolderObj = new BasicDBObject();
+	    if (opHolder.hasType()) opHolderObj.append("type", opHolder.getType());
+	    List<String> anchor = new ArrayList<String>();
+	    for (Term term : opHolder.getSpan().getTargets()) {
+		anchor.add(term.getId());
+	    }
+	    opHolderObj.append("anchor", anchor);
+	    opinionObj.append("opinion_holder", opHolderObj);
 	}
-	opHolderObj.append("anchor", anchor);
-	opinionObj.append("opinion_holder", opHolderObj);
 	// OpinionTarget
 	Opinion.OpinionTarget opTarget = opinion.getOpinionTarget();
-	BasicDBObject opTargetObj = new BasicDBObject();
-	anchor = new ArrayList<String>();
-	for (Term term : opTarget.getSpan().getTargets()) {
-	    anchor.add(term.getId());
+	if (opTarget != null) {
+	    BasicDBObject opTargetObj = new BasicDBObject();
+	    List<String> anchor = new ArrayList<String>();
+	    for (Term term : opTarget.getSpan().getTargets()) {
+		anchor.add(term.getId());
+	    }
+	    opTargetObj.append("anchor", anchor);
+	    opinionObj.append("opinion_target", opTargetObj);
 	}
-	opTargetObj.append("anchor", anchor);
-	opinionObj.append("opinion_target", opTargetObj);
 	// OpinionExpression
 	Opinion.OpinionExpression opExpression = opinion.getOpinionExpression();
-	BasicDBObject opExpressionObj = new BasicDBObject();
-	if (opExpression.hasPolarity()) opExpressionObj.append("polarity", opExpression.getPolarity());
-	if (opExpression.hasStrength()) opExpressionObj.append("strength", opExpression.getStrength());
-	if (opExpression.hasSubjectivity()) opExpressionObj.append("subjectivity", opExpression.getSubjectivity());
-	if (opExpression.hasSentimentSemanticType()) opExpressionObj.append("sentiment_semantic_type", opExpression.getSentimentSemanticType());
-	if (opExpression.hasSentimentProductFeature()) opExpressionObj.append("sentiment_product_feature", opExpression.getSentimentProductFeature());
-	anchor = new ArrayList<String>();
-	for (Term term : opExpression.getSpan().getTargets()) {
-	    anchor.add(term.getId());
+	if (opExpression != null) {
+	    BasicDBObject opExpressionObj = new BasicDBObject();
+	    if (opExpression.hasPolarity()) opExpressionObj.append("polarity", opExpression.getPolarity());
+	    if (opExpression.hasStrength()) opExpressionObj.append("strength", opExpression.getStrength());
+	    if (opExpression.hasSubjectivity()) opExpressionObj.append("subjectivity", opExpression.getSubjectivity());
+	    if (opExpression.hasSentimentSemanticType()) opExpressionObj.append("sentiment_semantic_type", opExpression.getSentimentSemanticType());
+	    if (opExpression.hasSentimentProductFeature()) opExpressionObj.append("sentiment_product_feature", opExpression.getSentimentProductFeature());
+	    List<String> anchor = new ArrayList<String>();
+	    for (Term term : opExpression.getSpan().getTargets()) {
+		anchor.add(term.getId());
+	    }
+	    opExpressionObj.append("anchor", anchor);
+	    opinionObj.append("opinion_expression", opExpressionObj);
 	}
-	opExpressionObj.append("anchor", anchor);
-	opinionObj.append("opinion_expression", opExpressionObj);
 
 	return opinionObj;
     }
@@ -532,19 +541,25 @@ public class MongoNafManager implements Serializable {
 
     public KAFDocument getNaf(Integer sessionId, String docId) throws Exception
     {
-	return this.getNaf(sessionId, docId, "all", "D", null);
+	List<String> layers = new ArrayList<String>();
+	layers.add("all");
+	return this.getNaf(sessionId, docId, layers, "D", null);
     }
 
-    public KAFDocument getNaf(Integer sessionId, String docId, String layerName) throws Exception
+    public KAFDocument getNaf(Integer sessionId, String docId, List<String> layerNames) throws Exception
     {
-	return this.getNaf(sessionId, docId, layerName, "D", null);
+	return this.getNaf(sessionId, docId, layerNames, "D", null);
     }
 
-    public KAFDocument getNaf(Integer sessionId, String docId, String layerName, String granularity, Integer part) throws Exception
+    public KAFDocument getNaf(Integer sessionId, String docId, List<String> layerNames, String granularity, Integer part) throws Exception
     {
+	//System.out.println("Get: " + layerName);
+
+	/*
 	if (!this.validLayerName(layerName)) {
 	    return null;
 	}
+	*/
 
 	KAFDocument naf = new KAFDocument("en", "v1");
 	HashMap<String, WF> wfIndex = new HashMap<String, WF>();
@@ -556,98 +571,111 @@ public class MongoNafManager implements Serializable {
 
 	// Raw text
 	this.queryRawTextLayer(sessionId, docId, naf);
-	if (layerName.equals("raw")) return naf;
-
+	layerNames.remove("raw");
+	if (layerNames.isEmpty()) return naf;
+	
 	// Text
 	nafObj = this.textColl.findOne(query);
-	if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
-	for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-	    this.getWf(mongoAnnotation, naf, wfIndex);
+	if (nafObj != null) {
+	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		this.getWf(mongoAnnotation, naf, wfIndex);
+	    }
 	}
-	if (layerName.equals("text")) return naf;
+	layerNames.remove("text");
+	if (layerNames.isEmpty()) return naf;
 
 	// Terms
 	nafObj = this.termsColl.findOne(query);
-	if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
-	for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-	    this.getTerm(mongoAnnotation, naf, termIndex, wfIndex);
+	if (nafObj != null) {
+	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		this.getTerm(mongoAnnotation, naf, termIndex, wfIndex);
+	    }
 	}
-	if (layerName.equals("terms")) return naf;
+	layerNames.remove("terms");
+	if (layerNames.isEmpty()) return naf;
 
 	// Entities
-	if (layerName.equals("entities") || layerName.equals("all")) {
+	if (layerNames.contains("entities") || layerNames.get(0).equals("all")) {
 	    nafObj = this.entitiesColl.findOne(query);
-	    if (nafObj == null) throw new Exception("Can not find the requested NAF document in the database."); 
-	    for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-		this.getEntity(mongoAnnotation, naf, termIndex);
+	    if (nafObj != null) {
+		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		    this.getEntity(mongoAnnotation, naf, termIndex);
+		}
 	    }
-	    if (layerName.equals("entities")) return naf;
+	    layerNames.remove("entities");
+	    if (layerNames.isEmpty()) return naf;
 	}
 
 	// Deps
-	if (layerName.equals("deps") || layerName.equals("all")) {
+	if (layerNames.contains("deps") || layerNames.get(0).equals("all")) {
 	    nafObj = this.depsColl.findOne(query);
-	    if (nafObj != null) { 
+	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getDep(mongoAnnotation, naf, termIndex);
 		}
 	    }
-	    if (layerName.equals("deps")) return naf;
+	    layerNames.remove("deps");
+	    if (layerNames.isEmpty()) return naf;
 	}
 
 	// Constituents
-	if (layerName.equals("constituents") || layerName.equals("all")) {
+	if (layerNames.contains("constituency") || layerNames.get(0).equals("all")) {
 	    nafObj = this.constituentsColl.findOne(query);
-	    if (nafObj != null) { 
+	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getTree(mongoAnnotation, naf, termIndex);
 		}
 	    }
-	    if (layerName.equals("constituents")) return naf;
+	    layerNames.remove("constituency");
+	    if (layerNames.isEmpty()) return naf;
 	}
 
 	// Chunks
-	if (layerName.equals("chunks") || layerName.equals("all")) {
+	if (layerNames.contains("chunks") || layerNames.get(0).equals("all")) {
 	    nafObj = this.chunksColl.findOne(query);
-	    if (nafObj != null) { 
+	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getChunk(mongoAnnotation, naf, termIndex);
 		}
 	    }
-	    if (layerName.equals("chunks")) return naf;
+	    layerNames.remove("chunks");
+	    if (layerNames.isEmpty()) return naf;
 	}
 	
 	// Coreferences
-	if (layerName.equals("coreferences") || layerName.equals("all")) {
+	if (layerNames.contains("coreferences") || layerNames.get(0).equals("all")) {
 	    nafObj = this.corefsColl.findOne(query);
-	    if (nafObj != null) { 
+	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getCoref(mongoAnnotation, naf, termIndex);
 		}
 	    }
-	    if (layerName.equals("coreferences")) return naf;
+	    layerNames.remove("coreferences");
+	    if (layerNames.isEmpty()) return naf;
 	}
 
 	// Opinions
-	if (layerName.equals("opinions") || layerName.equals("all")) {
+	if (layerNames.contains("opinions") || layerNames.get(0).equals("all")) {
 	    nafObj = this.opinionsColl.findOne(query);
-	    if (nafObj != null) { 
+	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getOpinion(mongoAnnotation, naf, termIndex);
 		}
 	    }
-	    if (layerName.equals("opinions")) return naf;
+	    layerNames.remove("opinions");
+	    if (layerNames.isEmpty()) return naf;
 	}
 
 	// SRL
-	if (layerName.equals("srl") || layerName.equals("all")) {
+	if (layerNames.contains("srl") || layerNames.get(0).equals("all")) {
 	    nafObj = this.srlColl.findOne(query);
-	    if (nafObj != null) { 
+	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getPredicate(mongoAnnotation, naf, termIndex);
 		}
 	    }
-	    if (layerName.equals("srl")) return naf;
+	    layerNames.remove("srl");
+	    if (layerNames.isEmpty()) return naf;
 	}
 
 	return naf;
@@ -661,7 +689,7 @@ public class MongoNafManager implements Serializable {
 	    || layerName.equals("terms")
 	    || layerName.equals("entities")
 	    || layerName.equals("deps")
-	    || layerName.equals("constituents")
+	    || layerName.equals("constituency")
 	    || layerName.equals("chunks")
 	    || layerName.equals("coreferences")
 	    || layerName.equals("opinions")
@@ -834,27 +862,33 @@ public class MongoNafManager implements Serializable {
 	String id = (String) mongoOpinion.get("id");
 	Opinion opinion = naf.newOpinion(id);
 	// Opinion Holder
-	Span<Term> terms = this.termSpanMongo2Naf(mongoOpHolder, termIndex);
-	Opinion.OpinionHolder opHolder = opinion.createOpinionHolder(terms);
-	if (mongoOpHolder.containsField("type")) {
-	    opHolder.setType((String) mongoOpHolder.get("type"));
+	if (mongoOpHolder != null) {
+	    Span<Term> terms = this.termSpanMongo2Naf(mongoOpHolder, termIndex);
+	    Opinion.OpinionHolder opHolder = opinion.createOpinionHolder(terms);
+	    if (mongoOpHolder.containsField("type")) {
+		opHolder.setType((String) mongoOpHolder.get("type"));
+	    }
 	}
 	// Opinion Target
-	terms = this.termSpanMongo2Naf(mongoOpTarget, termIndex);
-	Opinion.OpinionTarget opTarget = opinion.createOpinionTarget(terms);
+	if (mongoOpTarget != null) {
+	    Span<Term> terms = this.termSpanMongo2Naf(mongoOpTarget, termIndex);
+	    Opinion.OpinionTarget opTarget = opinion.createOpinionTarget(terms);
+	}
 	// Opinion Expression
-	terms = this.termSpanMongo2Naf(mongoOpExpression, termIndex);
-	Opinion.OpinionExpression opExpression = opinion.createOpinionExpression(terms);
-	if (mongoOpExpression.containsField("polarity"))
-	    opExpression.setPolarity((String) mongoOpExpression.get("polarity"));
-	if (mongoOpExpression.containsField("strength"))
-	    opExpression.setStrength((String) mongoOpExpression.get("strength"));
-	if (mongoOpExpression.containsField("subjectivity"))
-	    opExpression.setSubjectivity((String) mongoOpExpression.get("subjectivity"));
-	if (mongoOpExpression.containsField("sentiment_semantic_type"))
-	    opExpression.setSentimentSemanticType((String) mongoOpExpression.get("sentiment_semantic_type"));
-	if (mongoOpExpression.containsField("sentiment_product_feature"))
-	    opExpression.setSentimentProductFeature((String) mongoOpExpression.get("sentiment_product_feature"));	
+	if (mongoOpExpression != null) {
+	    Span<Term> terms = this.termSpanMongo2Naf(mongoOpExpression, termIndex);
+	    Opinion.OpinionExpression opExpression = opinion.createOpinionExpression(terms);
+	    if (mongoOpExpression.containsField("polarity"))
+		opExpression.setPolarity((String) mongoOpExpression.get("polarity"));
+	    if (mongoOpExpression.containsField("strength"))
+		opExpression.setStrength((String) mongoOpExpression.get("strength"));
+	    if (mongoOpExpression.containsField("subjectivity"))
+		opExpression.setSubjectivity((String) mongoOpExpression.get("subjectivity"));
+	    if (mongoOpExpression.containsField("sentiment_semantic_type"))
+		opExpression.setSentimentSemanticType((String) mongoOpExpression.get("sentiment_semantic_type"));
+	    if (mongoOpExpression.containsField("sentiment_product_feature"))
+		opExpression.setSentimentProductFeature((String) mongoOpExpression.get("sentiment_product_feature"));	
+	}
     }
 
     private void getPredicate(DBObject mongoPredicate, KAFDocument naf, HashMap<String, Term> termIndex)
