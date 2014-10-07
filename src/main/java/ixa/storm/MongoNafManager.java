@@ -37,6 +37,7 @@ public class MongoNafManager implements Serializable {
     private DBCollection corefsColl;
     private DBCollection opinionsColl;
     private DBCollection srlColl;
+    private DBCollection factualityColl;
 
     public static MongoNafManager instance(String server, int port, String dbName)
 	throws MongoNafException
@@ -67,6 +68,7 @@ public class MongoNafManager implements Serializable {
 	this.corefsColl = this.db.getCollection("coreferences");
 	this.opinionsColl = this.db.getCollection("opinions");
 	this.srlColl = this.db.getCollection("srl");
+	this.factualityColl = this.db.getCollection("factualitylayer");
 	if (this.textColl.getIndexInfo().size() == 0) {
 	    this.createIndexes();
 	}
@@ -93,6 +95,7 @@ public class MongoNafManager implements Serializable {
 	this.corefsColl.createIndex(new BasicDBObject(idField, 1));
 	this.opinionsColl.createIndex(new BasicDBObject(idField, 1));
 	this.srlColl.createIndex(new BasicDBObject(idField, 1));
+	this.factualityColl.createIndex(new BasicDBObject(idField, 1));
     }
 
     public void drop() {
@@ -111,6 +114,7 @@ public class MongoNafManager implements Serializable {
 	this.corefsColl.remove(new BasicDBObject(idField, docId));   
 	this.opinionsColl.remove(new BasicDBObject(idField, docId));   
 	this.srlColl.remove(new BasicDBObject(idField, docId)); 
+	this.factualityColl.remove(new BasicDBObject(idField, docId));
     }
 
     public void insertNafDocument(String docId, Integer sessionId, KAFDocument naf)
@@ -135,6 +139,7 @@ public class MongoNafManager implements Serializable {
 	this.insertLayer(docId, sessionId, naf, "coreferences", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "opinions", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "srl", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "factualitylayer", paragraph, sentence);
     }
 
     public void insertLayer(String docId, Integer sessionId, KAFDocument naf, String layerName)
@@ -211,6 +216,12 @@ public class MongoNafManager implements Serializable {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.srlColl;
+	    }
+	    if (layerName.equals("factualitylayer") || layerName.equals("all")) { 
+	        for (Factuality annotation : naf.getFactualities()) {
+		    annDBObjs.add(this.map(annotation));
+		}
+		docCollection = this.factualityColl;
 	    }
 	    if (annDBObjs.size() > 0) {
 		this.insertDocument(annDBObjs, docCollection, sessionId, docId, paragraph, sentence);
@@ -526,6 +537,16 @@ public class MongoNafManager implements Serializable {
 	return predicateObj;
     }
 
+    private DBObject map(Factuality factuality) {
+	// Linginfo
+	BasicDBObject factualityObj = new BasicDBObject("id", factuality.getId()).
+	    append("prediction", factuality.getPrediction());
+	if (factuality.hasConfidence()) {
+	    factualityObj.append("confidence", factuality.getConfidence());
+	}
+	return factualityObj;
+    }
+
     private DBObject map(ExternalRef extRef) {
 	BasicDBObject extRefObj = new BasicDBObject();
 	extRefObj.append("resource", extRef.getResource());
@@ -534,7 +555,9 @@ public class MongoNafManager implements Serializable {
 	    extRefObj.append("confidence", (Float) extRef.getConfidence());
 	}
 	if (extRef.hasExternalRef()) {
-	    extRefObj.append("external_reference", this.map(extRef.getExternalRef()));
+	    for (ExternalRef subExtRef : extRef.getExternalRefs()) {
+		extRefObj.append("external_reference", this.map(subExtRef));
+	    }
 	}
 	return extRefObj;
     }
@@ -678,6 +701,18 @@ public class MongoNafManager implements Serializable {
 	    if (layerNames.isEmpty()) return naf;
 	}
 
+	// Factuality layer
+	if (layerNames.contains("factualitylayer") || layerNames.get(0).equals("all")) {
+	    nafObj = this.factualityColl.findOne(query);
+	    if (nafObj != null) {
+		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		    this.getFactuality(mongoAnnotation, naf, wfIndex);
+		}
+	    }
+	    layerNames.remove("factualitylayer");
+	    if (layerNames.isEmpty()) return naf;
+	}
+
 	return naf;
     }
 
@@ -693,7 +728,8 @@ public class MongoNafManager implements Serializable {
 	    || layerName.equals("chunks")
 	    || layerName.equals("coreferences")
 	    || layerName.equals("opinions")
-	    || layerName.equals("srl");
+	    || layerName.equals("srl")
+	    || layerName.equals("factualitylayer");
     }
 
 
@@ -914,6 +950,16 @@ public class MongoNafManager implements Serializable {
 	predicate.addExternalRefs(this.externalRefsMongo2Naf(mongoPredicate, naf));	
     }
 
+    private void getFactuality(DBObject mongoFactuality, KAFDocument naf, HashMap<String, WF> wfIndex)
+    {
+	String id = (String) mongoFactuality.get("id");
+	String prediction = (String) mongoFactuality.get("prediction");
+	Factuality factuality = naf.newFactuality(wfIndex.get(id), prediction);
+	if (mongoFactuality.containsField("confidence")) {
+	    factuality.setConfidence((Double) mongoFactuality.get("confidence"));
+	}
+    }
+
     private void queryRawTextLayer(Integer sessionId, String docId, KAFDocument naf)
     {
 	String id = docId + "_" + sessionId;
@@ -1077,8 +1123,11 @@ public class MongoNafManager implements Serializable {
 	if (mongoExtRef.containsField("confidence")) {
 	    extRef.setConfidence(new Float((Double) mongoExtRef.get("confidence")));
 	}
-	if (mongoExtRef.containsField("external_reference"))
-	    extRef.setExternalRef(this.externalRefMongo2Naf((DBObject) mongoExtRef.get("external_reference"), naf));
+	if (mongoExtRef.containsField("external_reference")) {
+	    for (DBObject mongoSubExtRef : (List<DBObject>) mongoExtRef.get("external_reference")) {
+		extRef.setExternalRef(this.externalRefMongo2Naf(mongoSubExtRef, naf));
+	    }
+	}
 	return extRef;
     }
 
