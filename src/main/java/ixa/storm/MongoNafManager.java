@@ -38,6 +38,7 @@ public class MongoNafManager implements Serializable {
     private DBCollection opinionsColl;
     private DBCollection srlColl;
     private DBCollection factualityColl;
+    private DBCollection temporalExpressionsColl;
 
     public static MongoNafManager instance(String server, int port, String dbName)
 	throws MongoNafException
@@ -69,6 +70,7 @@ public class MongoNafManager implements Serializable {
 	this.opinionsColl = this.db.getCollection("opinions");
 	this.srlColl = this.db.getCollection("srl");
 	this.factualityColl = this.db.getCollection("factualitylayer");
+	this.temporalExpressionsColl = this.db.getCollection("temporalExpressions");
 	if (this.textColl.getIndexInfo().size() == 0) {
 	    this.createIndexes();
 	}
@@ -96,6 +98,7 @@ public class MongoNafManager implements Serializable {
 	this.opinionsColl.createIndex(new BasicDBObject(idField, 1));
 	this.srlColl.createIndex(new BasicDBObject(idField, 1));
 	this.factualityColl.createIndex(new BasicDBObject(idField, 1));
+	this.temporalExpressionsColl.createIndex(new BasicDBObject(idField, 1));
     }
 
     public void drop() {
@@ -115,6 +118,7 @@ public class MongoNafManager implements Serializable {
 	this.opinionsColl.remove(new BasicDBObject(idField, docId));   
 	this.srlColl.remove(new BasicDBObject(idField, docId)); 
 	this.factualityColl.remove(new BasicDBObject(idField, docId));
+	this.temporalExpressionsColl.remove(new BasicDBObject(idField, docId));
     }
 
     public void insertNafDocument(String docId, Integer sessionId, KAFDocument naf)
@@ -140,6 +144,7 @@ public class MongoNafManager implements Serializable {
 	this.insertLayer(docId, sessionId, naf, "opinions", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "srl", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "factualitylayer", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "temporalExpressions", paragraph, sentence);
     }
 
     public void insertLayer(String docId, Integer sessionId, KAFDocument naf, String layerName)
@@ -222,6 +227,12 @@ public class MongoNafManager implements Serializable {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.factualityColl;
+	    }
+	    if (layerName.equals("temporalExpressions") || layerName.equals("all")) { 
+		for (Timex3 annotation : naf.getTimeExs()) {
+		    annDBObjs.add(this.map(annotation));
+		}
+		docCollection = this.temporalExpressionsColl;
 	    }
 	    if (annDBObjs.size() > 0) {
 		this.insertDocument(annDBObjs, docCollection, sessionId, docId, paragraph, sentence);
@@ -547,6 +558,56 @@ public class MongoNafManager implements Serializable {
 	return factualityObj;
     }
 
+    private DBObject map(Timex3 timex3) {
+	// Linginfo
+	BasicDBObject timex3Obj = new BasicDBObject("id", timex3.getId()).
+	    append("type", timex3.getType());
+	if (timex3.hasBeginPoint()) {
+	    timex3Obj.append("beginPoint", timex3.getBeginPoint().getId());
+	}
+	if (timex3.hasEndPoint()) {
+	    timex3Obj.append("endPoint", timex3.getEndPoint().getId());
+	}
+	if (timex3.hasQuant()) {
+	    timex3Obj.append("quant", timex3.getQuant());
+	}
+	if (timex3.hasFreq()) {
+	    timex3Obj.append("freq", timex3.getFreq());
+	}
+	if (timex3.hasFunctionInDocument()) {
+	    timex3Obj.append("functionInDocument", timex3.getFunctionInDocument());
+	}
+	if (timex3.hasTemporalFunction()) {
+	    String tempFun = timex3.getTemporalFunction() ? "true" : "false";
+	    timex3Obj.append("temporalFunction", tempFun);
+	}
+	if (timex3.hasValue()) {
+	    timex3Obj.append("value", timex3.getValue());
+	}
+	if (timex3.hasValueFromFunction()) {
+	    timex3Obj.append("valueFromFunction", timex3.getValueFromFunction());
+	}
+	if (timex3.hasMod()) {
+	    timex3Obj.append("mod", timex3.getMod());
+	}
+	if (timex3.hasAnchorTimeId()) {
+	    timex3Obj.append("anchorTimeId", timex3.getAnchorTimeId());
+	}
+	if (timex3.hasComment()) {
+	    timex3Obj.append("comment", timex3.getComment());
+	}
+	if (timex3.hasSpan()) {
+	    Span<WF> span = timex3.getSpan();
+	    List<String> spanObj = new ArrayList<String>();
+	    for (WF wf : span.getTargets()) {
+		spanObj.add(wf.getId());
+	    }
+	    timex3Obj.append("anchor", spanObj);
+	}
+
+	return timex3Obj;
+    }
+
     private DBObject map(ExternalRef extRef) {
 	BasicDBObject extRefObj = new BasicDBObject();
 	extRefObj.append("resource", extRef.getResource());
@@ -713,6 +774,18 @@ public class MongoNafManager implements Serializable {
 	    if (layerNames.isEmpty()) return naf;
 	}
 
+	// TimeExpressions layer
+	if (layerNames.contains("timeExpressions") || layerNames.get(0).equals("all")) {
+	    nafObj = this.temporalExpressionsColl.findOne(query);
+	    if (nafObj != null) {
+		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		    this.getTimex3(mongoAnnotation, naf, wfIndex, termIndex);
+		}
+	    }
+	    layerNames.remove("timeExpressions");
+	    if (layerNames.isEmpty()) return naf;
+	}
+
 	return naf;
     }
 
@@ -729,7 +802,8 @@ public class MongoNafManager implements Serializable {
 	    || layerName.equals("coreferences")
 	    || layerName.equals("opinions")
 	    || layerName.equals("srl")
-	    || layerName.equals("factualitylayer");
+	    || layerName.equals("factualitylayer")
+	    || layerName.equals("timeExpressions");
     }
 
 
@@ -957,6 +1031,57 @@ public class MongoNafManager implements Serializable {
 	Factuality factuality = naf.newFactuality(wfIndex.get(id), prediction);
 	if (mongoFactuality.containsField("confidence")) {
 	    factuality.setConfidence((Double) mongoFactuality.get("confidence"));
+	}
+    }
+
+    private void getTimex3(DBObject mongoTimex3, KAFDocument naf, HashMap<String, WF> wfIndex, HashMap<String, Term> termIndex)
+    {
+	String id = (String) mongoTimex3.get("id");
+	String type = (String) mongoTimex3.get("type");
+	Timex3 timex3 = naf.newTimex3(id, type);
+	if (mongoTimex3.containsField("beginPoint")) {
+	    Term beginPoint = termIndex.get((String) mongoTimex3.get("beginPoint"));
+	    timex3.setBeginPoint(beginPoint);
+	}
+	if (mongoTimex3.containsField("endPoint")) {
+	    Term endPoint = termIndex.get((String) mongoTimex3.get("endPoint"));
+	    timex3.setEndPoint(endPoint);
+	}
+	if (mongoTimex3.containsField("quant")) {
+	    timex3.setQuant((String) mongoTimex3.get("quant"));
+	}
+	if (mongoTimex3.containsField("freq")) {
+	    timex3.setFreq((String) mongoTimex3.get("quant"));
+	}
+	if (mongoTimex3.containsField("functionInDocument")) {
+	    timex3.setFunctionInDocument((String) mongoTimex3.get("functionInDocument"));
+	}
+	if (mongoTimex3.containsField("temporalFunction")) {
+	    Boolean tempFunc = ((String) mongoTimex3.get("temporalFunction")).equals("true");
+	    timex3.setTemporalFunction(tempFunc);
+	}
+	if (mongoTimex3.containsField("value")) {
+	    timex3.setValue((String) mongoTimex3.get("value"));
+	}
+	if (mongoTimex3.containsField("valueFromFunction")) {
+	    timex3.setValueFromFunction((String) mongoTimex3.get("valueFromFunction"));
+	}
+	if (mongoTimex3.containsField("mod")) {
+	    timex3.setMod((String) mongoTimex3.get("mod"));
+	}
+	if (mongoTimex3.containsField("anchorTimeId")) {
+	    timex3.setAnchorTimeId((String) mongoTimex3.get("anchorTimeId"));
+	}
+	if (mongoTimex3.containsField("comment")) {
+	    timex3.setComment((String) mongoTimex3.get("comment"));
+	}
+	if (mongoTimex3.containsField("anchor")) {
+	    BasicDBList wfIds = (BasicDBList) mongoTimex3.get("anchor");
+	    Span<WF> span = KAFDocument.newWFSpan();
+	    for (int i = 0; i < wfIds.size(); i++) {
+		span.addTarget(wfIndex.get((String) wfIds.get(i)));
+	    }
+	    timex3.setSpan(span);
 	}
     }
 
