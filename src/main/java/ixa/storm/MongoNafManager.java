@@ -38,7 +38,8 @@ public class MongoNafManager implements Serializable {
     private DBCollection opinionsColl;
     private DBCollection srlColl;
     private DBCollection factualityColl;
-    private DBCollection temporalExpressionsColl;
+    private DBCollection timeExpressionsColl;
+    private DBCollection temporalRelationsColl;
 
     public static MongoNafManager instance(String server, int port, String dbName)
 	throws MongoNafException
@@ -70,7 +71,8 @@ public class MongoNafManager implements Serializable {
 	this.opinionsColl = this.db.getCollection("opinions");
 	this.srlColl = this.db.getCollection("srl");
 	this.factualityColl = this.db.getCollection("factualitylayer");
-	this.temporalExpressionsColl = this.db.getCollection("temporalExpressions");
+	this.timeExpressionsColl = this.db.getCollection("timeExpressions");
+	this.temporalRelationsColl = this.db.getCollection("temporalRelations");
 	if (this.textColl.getIndexInfo().size() == 0) {
 	    this.createIndexes();
 	}
@@ -98,7 +100,8 @@ public class MongoNafManager implements Serializable {
 	this.opinionsColl.createIndex(new BasicDBObject(idField, 1));
 	this.srlColl.createIndex(new BasicDBObject(idField, 1));
 	this.factualityColl.createIndex(new BasicDBObject(idField, 1));
-	this.temporalExpressionsColl.createIndex(new BasicDBObject(idField, 1));
+	this.timeExpressionsColl.createIndex(new BasicDBObject(idField, 1));
+	this.temporalRelationsColl.createIndex(new BasicDBObject(idField, 1));
     }
 
     public void drop() {
@@ -118,7 +121,8 @@ public class MongoNafManager implements Serializable {
 	this.opinionsColl.remove(new BasicDBObject(idField, docId));   
 	this.srlColl.remove(new BasicDBObject(idField, docId)); 
 	this.factualityColl.remove(new BasicDBObject(idField, docId));
-	this.temporalExpressionsColl.remove(new BasicDBObject(idField, docId));
+	this.timeExpressionsColl.remove(new BasicDBObject(idField, docId));
+	this.temporalRelationsColl.remove(new BasicDBObject(idField, docId));
     }
 
     public void insertNafDocument(String docId, Integer sessionId, KAFDocument naf)
@@ -144,7 +148,8 @@ public class MongoNafManager implements Serializable {
 	this.insertLayer(docId, sessionId, naf, "opinions", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "srl", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "factualitylayer", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "temporalExpressions", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "timeExpressions", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "temporalRelations", paragraph, sentence);
     }
 
     public void insertLayer(String docId, Integer sessionId, KAFDocument naf, String layerName)
@@ -228,11 +233,17 @@ public class MongoNafManager implements Serializable {
 		}
 		docCollection = this.factualityColl;
 	    }
-	    if (layerName.equals("temporalExpressions") || layerName.equals("all")) { 
+	    if (layerName.equals("timeExpressions") || layerName.equals("all")) { 
 		for (Timex3 annotation : naf.getTimeExs()) {
 		    annDBObjs.add(this.map(annotation));
 		}
-		docCollection = this.temporalExpressionsColl;
+		docCollection = this.timeExpressionsColl;
+	    }
+	    if (layerName.equals("temporalRelations") || layerName.equals("all")) { 
+		for (TLink annotation : naf.getTLinks()) {
+		    annDBObjs.add(this.map(annotation));
+		}
+		docCollection = this.temporalRelationsColl;
 	    }
 	    if (annDBObjs.size() > 0) {
 		this.insertDocument(annDBObjs, docCollection, sessionId, docId, paragraph, sentence);
@@ -608,6 +619,18 @@ public class MongoNafManager implements Serializable {
 	return timex3Obj;
     }
 
+    private DBObject map(TLink tLink) {
+	String fromType = (tLink.getFrom() instanceof Coref) ? "event" : "timex";
+	String toType = (tLink.getTo() instanceof Coref) ? "event" : "timex";
+	BasicDBObject tLinkObj = new BasicDBObject("id", tLink.getId()).
+	    append("from", tLink.getFrom().getId()).
+	    append("to", tLink.getTo().getId()).
+	    append("fromType", fromType).
+	    append("toType", toType).
+	    append("relType", tLink.getRelType());
+	return tLinkObj;
+    }
+
     private DBObject map(ExternalRef extRef) {
 	BasicDBObject extRefObj = new BasicDBObject();
 	extRefObj.append("resource", extRef.getResource());
@@ -648,6 +671,8 @@ public class MongoNafManager implements Serializable {
 	KAFDocument naf = new KAFDocument("en", "v1");
 	HashMap<String, WF> wfIndex = new HashMap<String, WF>();
 	HashMap<String, Term> termIndex = new HashMap<String, Term>();
+	HashMap<String, Coref> corefIndex = new HashMap<String, Coref>();
+	HashMap<String, Timex3> timexIndex = new HashMap<String, Timex3>();
 
 	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
 	DBObject nafObj;
@@ -731,7 +756,7 @@ public class MongoNafManager implements Serializable {
 	    nafObj = this.corefsColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-		    this.getCoref(mongoAnnotation, naf, termIndex);
+		    this.getCoref(mongoAnnotation, naf, corefIndex, termIndex);
 		}
 	    }
 	    layerNames.remove("coreferences");
@@ -776,13 +801,25 @@ public class MongoNafManager implements Serializable {
 
 	// TimeExpressions layer
 	if (layerNames.contains("timeExpressions") || layerNames.get(0).equals("all")) {
-	    nafObj = this.temporalExpressionsColl.findOne(query);
+	    nafObj = this.timeExpressionsColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-		    this.getTimex3(mongoAnnotation, naf, wfIndex, termIndex);
+		    this.getTimex3(mongoAnnotation, naf, timexIndex, wfIndex, termIndex);
 		}
 	    }
 	    layerNames.remove("timeExpressions");
+	    if (layerNames.isEmpty()) return naf;
+	}
+
+	// TemporalRelations layer
+	if (layerNames.contains("temporalRelations") || layerNames.get(0).equals("all")) {
+	    nafObj = this.temporalRelationsColl.findOne(query);
+	    if (nafObj != null) {
+		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		    this.getTLink(mongoAnnotation, naf, corefIndex, timexIndex);
+		}
+	    }
+	    layerNames.remove("temporalRelations");
 	    if (layerNames.isEmpty()) return naf;
 	}
 
@@ -803,7 +840,8 @@ public class MongoNafManager implements Serializable {
 	    || layerName.equals("opinions")
 	    || layerName.equals("srl")
 	    || layerName.equals("factualitylayer")
-	    || layerName.equals("timeExpressions");
+	    || layerName.equals("timeExpressions")
+	    || layerName.equals("temporalRelations");
     }
 
 
@@ -947,7 +985,7 @@ public class MongoNafManager implements Serializable {
 	}	
     }
 
-    private void getCoref(DBObject mongoCoref, KAFDocument naf, HashMap<String, Term> termIndex)
+    private void getCoref(DBObject mongoCoref, KAFDocument naf, HashMap<String, Coref> corefIndex, HashMap<String, Term> termIndex)
     {
 	List<BasicDBList> mentionObjs = (List<BasicDBList>) mongoCoref.get("anchor");
 	List<Span<Term>> mentions = new ArrayList<Span<Term>>();
@@ -961,7 +999,8 @@ public class MongoNafManager implements Serializable {
 	    mentions.add(terms);
 	}
 	String id = (String) mongoCoref.get("id");
-	Coref coref = naf.newCoref(id, mentions);	
+	Coref coref = naf.newCoref(id, mentions);
+	corefIndex.put(coref.getId(), coref);
     }
 
     private void getOpinion(DBObject mongoOpinion, KAFDocument naf, HashMap<String, Term> termIndex)
@@ -1034,7 +1073,7 @@ public class MongoNafManager implements Serializable {
 	}
     }
 
-    private void getTimex3(DBObject mongoTimex3, KAFDocument naf, HashMap<String, WF> wfIndex, HashMap<String, Term> termIndex)
+    private void getTimex3(DBObject mongoTimex3, KAFDocument naf, HashMap<String, Timex3> timexIndex, HashMap<String, WF> wfIndex, HashMap<String, Term> termIndex)
     {
 	String id = (String) mongoTimex3.get("id");
 	String type = (String) mongoTimex3.get("type");
@@ -1083,6 +1122,19 @@ public class MongoNafManager implements Serializable {
 	    }
 	    timex3.setSpan(span);
 	}
+	timexIndex.put(timex3.getId(), timex3);
+    }
+
+    private void getTLink(DBObject mongoTLink, KAFDocument naf, HashMap<String, Coref> corefIndex, HashMap<String, Timex3> timexIndex) {
+	String id = (String) mongoTLink.get("id");
+	String fromId = (String) mongoTLink.get("from");
+	String toId = (String) mongoTLink.get("to");
+	String fromType = (String) mongoTLink.get("fromType");
+	String toType = (String) mongoTLink.get("toType");
+	String relType = (String) mongoTLink.get("relType");
+	TLinkReferable from = fromType.equals("event") ? corefIndex.get(fromId) : timexIndex.get(fromId);
+	TLinkReferable to = toType.equals("event") ? corefIndex.get(toId) : timexIndex.get(toId);
+	TLink tLink = naf.newTLink(id, from, to, relType);
     }
 
     private void queryRawTextLayer(Integer sessionId, String docId, KAFDocument naf)
