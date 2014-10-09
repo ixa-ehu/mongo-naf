@@ -87,21 +87,19 @@ public class MongoNafManager implements Serializable {
     }
 
     public void createIndexes() {
-	//System.out.println("Creating indexes...");
-	String idField = "doc_id";
-	this.rawColl.createIndex(new BasicDBObject(idField, 1));
-	this.textColl.createIndex(new BasicDBObject(idField, 1));
-	this.termsColl.createIndex(new BasicDBObject(idField, 1));
-	this.entitiesColl.createIndex(new BasicDBObject(idField, 1));
-	this.depsColl.createIndex(new BasicDBObject(idField, 1));
-	this.constituentsColl.createIndex(new BasicDBObject(idField, 1));
-	this.chunksColl.createIndex(new BasicDBObject(idField, 1));
-	this.corefsColl.createIndex(new BasicDBObject(idField, 1));
-	this.opinionsColl.createIndex(new BasicDBObject(idField, 1));
-	this.srlColl.createIndex(new BasicDBObject(idField, 1));
-	this.factualityColl.createIndex(new BasicDBObject(idField, 1));
-	this.timeExpressionsColl.createIndex(new BasicDBObject(idField, 1));
-	this.temporalRelationsColl.createIndex(new BasicDBObject(idField, 1));
+	this.rawColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
+	this.textColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
+	this.termsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
+	this.entitiesColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
+	this.depsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
+	this.constituentsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
+	this.chunksColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
+	this.corefsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
+	this.opinionsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
+	this.srlColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
+	this.factualityColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
+	this.timeExpressionsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
+	this.temporalRelationsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
     }
 
     public void drop() {
