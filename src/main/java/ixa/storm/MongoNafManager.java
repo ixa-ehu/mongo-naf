@@ -173,73 +173,73 @@ public class MongoNafManager implements Serializable {
 	else {
 	    List<DBObject> annDBObjs = new ArrayList<DBObject>();
 	    DBCollection docCollection = null;
-	    if (layerName.equals("text") || layerName.equals("all")) {
+	    if (layerName.equals("text")) {
 		for (WF annotation : naf.getWFs()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.textColl;
 	    }
-	    if (layerName.equals("terms") || layerName.equals("all")) {
+	    if (layerName.equals("terms")) {
 	        for (Term annotation : naf.getTerms()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.termsColl;
 	    }
-	    if (layerName.equals("entities") || layerName.equals("all")) {
+	    if (layerName.equals("entities")) {
 		for (Entity annotation : naf.getEntities()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.entitiesColl;
 	    }
-	    if (layerName.equals("deps") || layerName.equals("all")) {
+	    if (layerName.equals("deps")) {
 	        for (Dep annotation : naf.getDeps()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.depsColl;
 	    }
-	    if (layerName.equals("constituency") || layerName.equals("all")) {
+	    if (layerName.equals("constituency")) {
 	        for (Tree annotation : naf.getConstituents()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.constituentsColl;
 	    }
-	    if (layerName.equals("chunks") || layerName.equals("all")) {
+	    if (layerName.equals("chunks")) {
 	        for (Chunk annotation : naf.getChunks()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.chunksColl;
 	    }
-	    if (layerName.equals("coreferences") || layerName.equals("all")) {
+	    if (layerName.equals("coreferences")) {
 	        for (Coref annotation : naf.getCorefs()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.corefsColl;
 	    }
-	    if (layerName.equals("opinions") || layerName.equals("all")) {
+	    if (layerName.equals("opinions")) {
 	        for (Opinion annotation : naf.getOpinions()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.opinionsColl;
 	    }
-	    if (layerName.equals("srl") || layerName.equals("all")) { 
+	    if (layerName.equals("srl")) { 
 	        for (Predicate annotation : naf.getPredicates()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.srlColl;
 	    }
-	    if (layerName.equals("factualitylayer") || layerName.equals("all")) { 
+	    if (layerName.equals("factualitylayer")) {
 	        for (Factuality annotation : naf.getFactualities()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.factualityColl;
 	    }
-	    if (layerName.equals("timeExpressions") || layerName.equals("all")) { 
+	    if (layerName.equals("timeExpressions")) { 
 		for (Timex3 annotation : naf.getTimeExs()) {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.timeExpressionsColl;
 	    }
-	    if (layerName.equals("temporalRelations") || layerName.equals("all")) { 
+	    if (layerName.equals("temporalRelations")) { 
 		for (TLink annotation : naf.getTLinks()) {
 		    annDBObjs.add(this.map(annotation));
 		}
@@ -667,8 +667,8 @@ public class MongoNafManager implements Serializable {
 	    return null;
 	}
 	*/
-
 	KAFDocument naf = new KAFDocument("en", "v1");
+
 	HashMap<String, WF> wfIndex = new HashMap<String, WF>();
 	HashMap<String, Term> termIndex = new HashMap<String, Term>();
 	HashMap<String, Coref> corefIndex = new HashMap<String, Coref>();
