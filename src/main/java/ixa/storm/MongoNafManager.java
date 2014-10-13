@@ -1,6 +1,7 @@
 package ixa.storm;
 
 import ixa.kaflib.*;
+import ixa.kaflib.KAFDocument.LinguisticProcessor;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoException;
 import com.mongodb.WriteConcern;
@@ -27,6 +28,7 @@ public class MongoNafManager implements Serializable {
     private DB db;
     private DBCollection logColl;
     private DBCollection sesColl;
+    private DBCollection lpColl;
     private DBCollection rawColl;
     private DBCollection textColl;
     private DBCollection termsColl;
@@ -60,6 +62,7 @@ public class MongoNafManager implements Serializable {
 	}
 	this.logColl = this.db.getCollection("log");
 	this.sesColl = this.db.getCollection("session");
+	this.lpColl = this.db.getCollection("linguisticProcessors");
 	this.rawColl = this.db.getCollection("raw");
 	this.textColl = this.db.getCollection("text");
 	this.termsColl = this.db.getCollection("terms");
@@ -87,6 +90,7 @@ public class MongoNafManager implements Serializable {
     }
 
     public void createIndexes() {
+	this.lpColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1).append("name", 1));
 	this.rawColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
 	this.textColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
 	this.termsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
@@ -108,6 +112,7 @@ public class MongoNafManager implements Serializable {
 
     public void removeDoc(String docId) {
 	String idField = "doc_id";
+	this.lpColl.remove(new BasicDBObject(idField, docId));
 	this.rawColl.remove(new BasicDBObject(idField, docId));
 	this.textColl.remove(new BasicDBObject(idField, docId));
 	this.termsColl.remove(new BasicDBObject(idField, docId));
@@ -135,6 +140,7 @@ public class MongoNafManager implements Serializable {
 
     public void insertNafDocument(String docId, Integer sessionId, KAFDocument naf, Integer paragraph, Integer sentence)
     {
+	this.insertLinguisticProcessors(docId, sessionId, naf);
 	this.insertLayer(docId, sessionId, naf, "raw", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "text", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "terms", paragraph, sentence);
@@ -148,6 +154,43 @@ public class MongoNafManager implements Serializable {
 	this.insertLayer(docId, sessionId, naf, "factualitylayer", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "timeExpressions", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "temporalRelations", paragraph, sentence);
+    }
+
+    public void insertLinguisticProcessors(String docId, Integer sessionId, KAFDocument naf) {
+	List<String> existingLps = this.getLinguisticProcessorNames(docId, sessionId);
+	List<LinguisticProcessor> lps = naf.getLinguisticProcessorList();
+	for (LinguisticProcessor lp : lps) {
+	    if (!existingLps.contains(lp.getName())) {
+		this.insertLinguisticProcessor(docId, sessionId, lp);
+	    }
+	}
+    }
+
+    public void insertLinguisticProcessor(String docId, Integer sessionId, LinguisticProcessor lp) {
+	BasicDBObject doc = new BasicDBObject()
+	    .append("session_id", sessionId)
+	    .append("doc_id", docId)
+	    .append("name", lp.getName())
+	    .append("layer", lp.getLayer());
+	String id = sessionId + "_" + docId + "_" + lp.getName();
+	doc.append("_id", id);
+	if (lp.hasTimestamp()) {
+	    doc.append("timestamp", lp.getTimestamp());
+	}
+	if (lp.hasBeginTimestamp()) {
+	    doc.append("beginTimestamp", lp.getBeginTimestamp());
+	}
+	if (lp.hasEndTimestamp()) {
+	    doc.append("endTimestamp", lp.getEndTimestamp());
+	}
+	if (lp.hasVersion()) {
+	    doc.append("version", lp.getVersion());
+	}
+	try {
+	    this.lpColl.save(doc);
+	} catch(MongoException e) {
+	    System.out.println("Error storing a LP.");
+	}
     }
 
     public void insertLayer(String docId, Integer sessionId, KAFDocument naf, String layerName)
@@ -667,6 +710,8 @@ public class MongoNafManager implements Serializable {
 	*/
 	KAFDocument naf = new KAFDocument("en", "v1");
 
+	this.getLinguisticProcessors(sessionId, docId, naf);
+
 	HashMap<String, WF> wfIndex = new HashMap<String, WF>();
 	HashMap<String, Term> termIndex = new HashMap<String, Term>();
 	HashMap<String, Coref> corefIndex = new HashMap<String, Coref>();
@@ -842,8 +887,43 @@ public class MongoNafManager implements Serializable {
 	    || layerName.equals("temporalRelations");
     }
 
+    public List<String> getLinguisticProcessorNames(String docId, Integer sessionId) {
+	DBObject query = new BasicDBObject("session_id", sessionId)
+	    .append("doc_id", docId);
+        return this.lpColl.distinct("name", query);
+    }
+
+    public void getLinguisticProcessors(Integer sessionId, String docId, KAFDocument naf) {
+	DBObject query = new BasicDBObject("session_id", sessionId)
+	    .append("doc_id", docId);
+        List<DBObject> mongoLps = this.lpColl.find(query).toArray();
+	for (DBObject mongoLp : mongoLps) {
+	    this.getLp(mongoLp, naf);
+	}
+    }
+
 
     /* PRIVATE METHODS */
+
+    private void getLp(DBObject mongoLp, KAFDocument naf) {
+	String layer = (String) mongoLp.get("layer");
+	String name = (String) mongoLp.get("name");
+	if (!naf.linguisticProcessorExists(layer, name)) {
+	    LinguisticProcessor newLp = naf.addLinguisticProcessor(layer, name);
+	    if (mongoLp.containsField("version")) {
+		newLp.setVersion((String) mongoLp.get("version"));
+	    }
+	    if (mongoLp.containsField("timestamp")) {
+		newLp.setTimestamp((String) mongoLp.get("timestamp"));
+	    }
+	    if (mongoLp.containsField("beginTimestamp")) {
+		newLp.setBeginTimestamp((String) mongoLp.get("beginTimestamp"));
+	    }
+	    if (mongoLp.containsField("endTimestamp")) {
+		newLp.setEndTimestamp((String) mongoLp.get("endTimestamp"));
+	    }
+	}
+    }
 
     private void getWf(DBObject mongoWf, KAFDocument naf, HashMap<String, WF> wfIndex)
     {
