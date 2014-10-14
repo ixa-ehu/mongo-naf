@@ -490,6 +490,7 @@ public class MongoNafManager implements Serializable {
     private DBObject map(Coref coref) {
 	// Linginfo
 	BasicDBObject corefObj = new BasicDBObject("id", coref.getId());
+	if (coref.hasType()) corefObj.append("type", coref.getType());
 	// Anchor
 	List<List<String>> anchor = new ArrayList<List<String>>();
 	for (Span<Term> span : coref.getSpans()) {
@@ -1078,6 +1079,9 @@ public class MongoNafManager implements Serializable {
 	}
 	String id = (String) mongoCoref.get("id");
 	Coref coref = naf.newCoref(id, mentions);
+	if (mongoCoref.containsField("type")) {
+	    coref.setType((String) mongoCoref.get("type"));
+	}
 	corefIndex.put(coref.getId(), coref);
     }
 
