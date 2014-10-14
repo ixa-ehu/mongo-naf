@@ -42,6 +42,7 @@ public class MongoNafManager implements Serializable {
     private DBCollection factualityColl;
     private DBCollection timeExpressionsColl;
     private DBCollection temporalRelationsColl;
+    private DBCollection causalRelationsColl;
 
     public static MongoNafManager instance(String server, int port, String dbName)
 	throws MongoNafException
@@ -76,6 +77,7 @@ public class MongoNafManager implements Serializable {
 	this.factualityColl = this.db.getCollection("factualitylayer");
 	this.timeExpressionsColl = this.db.getCollection("timeExpressions");
 	this.temporalRelationsColl = this.db.getCollection("temporalRelations");
+	this.causalRelationsColl = this.db.getCollection("causalRelations");
 	if (this.textColl.getIndexInfo().size() == 0) {
 	    this.createIndexes();
 	}
@@ -104,6 +106,7 @@ public class MongoNafManager implements Serializable {
 	this.factualityColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
 	this.timeExpressionsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
 	this.temporalRelationsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
+	this.causalRelationsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
     }
 
     public void drop() {
@@ -126,6 +129,7 @@ public class MongoNafManager implements Serializable {
 	this.factualityColl.remove(new BasicDBObject(idField, docId));
 	this.timeExpressionsColl.remove(new BasicDBObject(idField, docId));
 	this.temporalRelationsColl.remove(new BasicDBObject(idField, docId));
+	this.causalRelationsColl.remove(new BasicDBObject(idField, docId));
     }
 
     public void insertNafDocument(String docId, Integer sessionId, KAFDocument naf)
@@ -154,6 +158,7 @@ public class MongoNafManager implements Serializable {
 	this.insertLayer(docId, sessionId, naf, "factualitylayer", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "timeExpressions", paragraph, sentence);
 	this.insertLayer(docId, sessionId, naf, "temporalRelations", paragraph, sentence);
+	this.insertLayer(docId, sessionId, naf, "causalRelations", paragraph, sentence);
     }
 
     public void insertLinguisticProcessors(String docId, Integer sessionId, KAFDocument naf) {
@@ -285,6 +290,12 @@ public class MongoNafManager implements Serializable {
 		    annDBObjs.add(this.map(annotation));
 		}
 		docCollection = this.temporalRelationsColl;
+	    }
+	    if (layerName.equals("causalRelations")) { 
+		for (CLink annotation : naf.getCLinks()) {
+		    annDBObjs.add(this.map(annotation));
+		}
+		docCollection = this.causalRelationsColl;
 	    }
 	    if (annDBObjs.size() > 0) {
 		this.insertDocument(annDBObjs, docCollection, sessionId, docId, paragraph, sentence);
@@ -673,6 +684,16 @@ public class MongoNafManager implements Serializable {
 	return tLinkObj;
     }
 
+    private DBObject map(CLink cLink) {
+	BasicDBObject cLinkObj = new BasicDBObject("id", cLink.getId()).
+	    append("from", cLink.getFrom().getId()).
+	    append("to", cLink.getTo().getId());
+	if (cLink.hasRelType()) {
+	    cLinkObj.append("relType", cLink.getRelType());
+	}
+	return cLinkObj;
+    }
+
     private DBObject map(ExternalRef extRef) {
 	BasicDBObject extRefObj = new BasicDBObject();
 	extRefObj.append("resource", extRef.getResource());
@@ -867,6 +888,18 @@ public class MongoNafManager implements Serializable {
 	    if (layerNames.isEmpty()) return naf;
 	}
 
+	// CausalRelations layer
+	if (layerNames.contains("causalRelations") || layerNames.get(0).equals("all")) {
+	    nafObj = this.causalRelationsColl.findOne(query);
+	    if (nafObj != null) {
+		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
+		    this.getCLink(mongoAnnotation, naf, corefIndex);
+		}
+	    }
+	    layerNames.remove("causalRelations");
+	    if (layerNames.isEmpty()) return naf;
+	}
+
 	return naf;
     }
 
@@ -885,7 +918,8 @@ public class MongoNafManager implements Serializable {
 	    || layerName.equals("srl")
 	    || layerName.equals("factualitylayer")
 	    || layerName.equals("timeExpressions")
-	    || layerName.equals("temporalRelations");
+	    || layerName.equals("temporalRelations")
+	    || layerName.equals("causalRelations");
     }
 
     public List<String> getLinguisticProcessorNames(String docId, Integer sessionId) {
@@ -1217,6 +1251,19 @@ public class MongoNafManager implements Serializable {
 	TLinkReferable from = fromType.equals("event") ? corefIndex.get(fromId) : timexIndex.get(fromId);
 	TLinkReferable to = toType.equals("event") ? corefIndex.get(toId) : timexIndex.get(toId);
 	TLink tLink = naf.newTLink(id, from, to, relType);
+    }
+
+    private void getCLink(DBObject mongoCLink, KAFDocument naf, HashMap<String, Coref> corefIndex) {
+	String id = (String) mongoCLink.get("id");
+	String fromId = (String) mongoCLink.get("from");
+	String toId = (String) mongoCLink.get("to");
+	String relType = (String) mongoCLink.get("relType");
+	Coref from = corefIndex.get(fromId);
+	Coref to = corefIndex.get(toId);
+	CLink cLink = naf.newCLink(id, from, to);
+	if (mongoCLink.containsField("relType")) {
+	    cLink.setRelType((String) mongoCLink.get("relType"));
+	}
     }
 
     private void queryRawTextLayer(Integer sessionId, String docId, KAFDocument naf)
