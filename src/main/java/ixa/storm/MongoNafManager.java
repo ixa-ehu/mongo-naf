@@ -20,14 +20,13 @@ import java.net.UnknownHostException;
 import java.io.Serializable;
 
 
-public class MongoNafManager implements Serializable {
+public class MongoNafManager {
 
     private static MongoNafManager instance;
     private String nafVersion;
     private String nafLang;
     private DB db;
     private DBCollection logColl;
-    private DBCollection sesColl;
     private DBCollection lpColl;
     private DBCollection rawColl;
     private DBCollection textColl;
@@ -1298,17 +1297,29 @@ public class MongoNafManager implements Serializable {
 	return extRef;
     }
 
-
-    /*
-    public void writeLogEntry(Integer sessionId, String entry)
-    {
-	BasicDBObject entryDoc = new BasicDBObject("session_id", sessionId)
-	    .append("value", entry);
-	try {
-	    this.logColl.insert(entryDoc);
-	} catch(MongoException e) {}
+    public void writeDocLogEntry(String tag, String docId, Long timestamp, String hostname) throws Exception {
+	DBObject obj = new BasicDBObject("tag", tag)
+	    .append("doc_id", docId)
+	    .append("timestamp", timestamp)
+	    .append("hostname", hostname);
+	this.writeLogEntry(obj);
     }
 
+    public void writeModuleLogEntry(String tag, String docId, String moduleId, Long timestamp, String hostname) throws Exception {
+	DBObject obj = new BasicDBObject("tag", tag)
+	    .append("doc_id", docId)
+	    .append("module_id", moduleId)
+	    .append("timestamp", timestamp)
+	    .append("hostname", hostname);
+	this.writeLogEntry(obj);
+    }
+
+    private void writeLogEntry(DBObject entry) throws Exception
+    {
+	this.logColl.insert(entry);
+    }
+
+    /*
     public List<String> getLog(Integer sessionId)
     {
 	BasicDBObject query = new BasicDBObject("session_id", sessionId);
