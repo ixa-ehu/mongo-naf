@@ -44,16 +44,8 @@ public class MongoNafManager implements Serializable {
     private DBCollection temporalRelationsColl;
     private DBCollection causalRelationsColl;
 
-    public static MongoNafManager instance(String server, int port, String dbName)
-	throws MongoNafException
-    {
-	if (instance == null) {
-	    instance = new MongoNafManager(server, port, dbName);
-	}
-	return instance;
-    }
 
-    private MongoNafManager(String server, int port, String dbName)
+    public MongoNafManager(String server, int port, String dbName)
 	throws MongoNafException {
 	try {
 	    MongoClient mongoClient = new MongoClient(server, port);
@@ -78,7 +70,7 @@ public class MongoNafManager implements Serializable {
 	this.timeExpressionsColl = this.db.getCollection("timeExpressions");
 	this.temporalRelationsColl = this.db.getCollection("temporalRelations");
 	this.causalRelationsColl = this.db.getCollection("causalRelations");
-	if (this.textColl.getIndexInfo().size() == 0) {
+	if (this.textColl.getIndexInfo().size() == 0) { // @TODO: check system.indexes instead of text
 	    this.createIndexes();
 	}
 	// Default NAF values
@@ -91,7 +83,7 @@ public class MongoNafManager implements Serializable {
 	this.nafLang = lang;
     }
 
-    public void createIndexes() {
+    private void createIndexes() {
 	this.lpColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1).append("name", 1));
 	this.rawColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
 	this.textColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
