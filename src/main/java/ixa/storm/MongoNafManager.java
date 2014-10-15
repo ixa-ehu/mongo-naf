@@ -54,7 +54,6 @@ public class MongoNafManager implements Serializable {
 	    throw new MongoNafException("Error connecting to MongoDB.");
 	}
 	this.logColl = this.db.getCollection("log");
-	this.sesColl = this.db.getCollection("session");
 	this.lpColl = this.db.getCollection("linguisticProcessors");
 	this.rawColl = this.db.getCollection("raw");
 	this.textColl = this.db.getCollection("text");
@@ -84,21 +83,7 @@ public class MongoNafManager implements Serializable {
     }
 
     private void createIndexes() {
-	this.lpColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1).append("name", 1));
-	this.rawColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
-	this.textColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
-	this.termsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
-	this.entitiesColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
-	this.depsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
-	this.constituentsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
-	this.chunksColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
-	this.corefsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
-	this.opinionsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
-	this.srlColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
-	this.factualityColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
-	this.timeExpressionsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
-	this.temporalRelationsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
-	this.causalRelationsColl.createIndex(new BasicDBObject("session_id", 1).append("doc_id", 1));
+	this.lpColl.createIndex(new BasicDBObject("doc_id", 1).append("name", 1));
     }
 
     public void drop() {
@@ -106,70 +91,69 @@ public class MongoNafManager implements Serializable {
     }
 
     public void removeDoc(String docId) {
-	String idField = "doc_id";
-	this.lpColl.remove(new BasicDBObject(idField, docId));
-	this.rawColl.remove(new BasicDBObject(idField, docId));
-	this.textColl.remove(new BasicDBObject(idField, docId));
-	this.termsColl.remove(new BasicDBObject(idField, docId));
-	this.entitiesColl.remove(new BasicDBObject(idField, docId));  
-	this.depsColl.remove(new BasicDBObject(idField, docId));    
-	this.constituentsColl.remove(new BasicDBObject(idField, docId));   
-	this.chunksColl.remove(new BasicDBObject(idField, docId));   
-	this.corefsColl.remove(new BasicDBObject(idField, docId));   
-	this.opinionsColl.remove(new BasicDBObject(idField, docId));   
-	this.srlColl.remove(new BasicDBObject(idField, docId)); 
-	this.factualityColl.remove(new BasicDBObject(idField, docId));
-	this.timeExpressionsColl.remove(new BasicDBObject(idField, docId));
-	this.temporalRelationsColl.remove(new BasicDBObject(idField, docId));
-	this.causalRelationsColl.remove(new BasicDBObject(idField, docId));
+	DBObject docDef = new BasicDBObject("doc_id", docId);
+	this.lpColl.remove(docDef);
+	this.rawColl.remove(docDef);
+	this.textColl.remove(docDef);
+	this.termsColl.remove(docDef);
+	this.entitiesColl.remove(docDef);  
+	this.depsColl.remove(docDef);    
+	this.constituentsColl.remove(docDef);   
+	this.chunksColl.remove(docDef);   
+	this.corefsColl.remove(docDef);   
+	this.opinionsColl.remove(docDef);   
+	this.srlColl.remove(docDef); 
+	this.factualityColl.remove(docDef);
+	this.timeExpressionsColl.remove(docDef);
+	this.temporalRelationsColl.remove(docDef);
+	this.causalRelationsColl.remove(docDef);
     }
 
-    public void insertNafDocument(String docId, Integer sessionId, KAFDocument naf)
+    public void insertNafDocument(String docId, KAFDocument naf)
     {
-	this.insertNafDocument(docId, sessionId, naf, null, null);
+	this.insertNafDocument(docId, naf, null, null);
     }
 	
-    public void insertNafDocument(String docId, Integer sessionId, KAFDocument naf, Integer paragraph)
+    public void insertNafDocument(String docId, KAFDocument naf, Integer paragraph)
     {
-	this.insertNafDocument(docId, sessionId, naf, paragraph, null);
+	this.insertNafDocument(docId, naf, paragraph, null);
     }
 
-    public void insertNafDocument(String docId, Integer sessionId, KAFDocument naf, Integer paragraph, Integer sentence)
+    public void insertNafDocument(String docId, KAFDocument naf, Integer paragraph, Integer sentence)
     {
-	this.insertLinguisticProcessors(docId, sessionId, naf);
-	this.insertLayer(docId, sessionId, naf, "raw", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "text", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "terms", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "entities", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "deps", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "constituency", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "chunks", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "coreferences", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "opinions", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "srl", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "factualitylayer", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "timeExpressions", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "temporalRelations", paragraph, sentence);
-	this.insertLayer(docId, sessionId, naf, "causalRelations", paragraph, sentence);
+	this.insertLinguisticProcessors(docId, naf);
+	this.insertLayer(docId, naf, "raw", paragraph, sentence);
+	this.insertLayer(docId, naf, "text", paragraph, sentence);
+	this.insertLayer(docId, naf, "terms", paragraph, sentence);
+	this.insertLayer(docId, naf, "entities", paragraph, sentence);
+	this.insertLayer(docId, naf, "deps", paragraph, sentence);
+	this.insertLayer(docId, naf, "constituency", paragraph, sentence);
+	this.insertLayer(docId, naf, "chunks", paragraph, sentence);
+	this.insertLayer(docId, naf, "coreferences", paragraph, sentence);
+	this.insertLayer(docId, naf, "opinions", paragraph, sentence);
+	this.insertLayer(docId, naf, "srl", paragraph, sentence);
+	this.insertLayer(docId, naf, "factualitylayer", paragraph, sentence);
+	this.insertLayer(docId, naf, "timeExpressions", paragraph, sentence);
+	this.insertLayer(docId, naf, "temporalRelations", paragraph, sentence);
+	this.insertLayer(docId, naf, "causalRelations", paragraph, sentence);
     }
 
-    public void insertLinguisticProcessors(String docId, Integer sessionId, KAFDocument naf) {
-	List<String> existingLps = this.getLinguisticProcessorNames(docId, sessionId);
+    public void insertLinguisticProcessors(String docId, KAFDocument naf) {
+	List<String> existingLps = this.getLinguisticProcessorNames(docId);
 	List<LinguisticProcessor> lps = naf.getLinguisticProcessorList();
 	for (LinguisticProcessor lp : lps) {
 	    if (!existingLps.contains(lp.getName())) {
-		this.insertLinguisticProcessor(docId, sessionId, lp);
+		this.insertLinguisticProcessor(docId, lp);
 	    }
 	}
     }
 
-    public void insertLinguisticProcessor(String docId, Integer sessionId, LinguisticProcessor lp) {
+    public void insertLinguisticProcessor(String docId, LinguisticProcessor lp) {
 	BasicDBObject doc = new BasicDBObject()
-	    .append("session_id", sessionId)
 	    .append("doc_id", docId)
 	    .append("name", lp.getName())
 	    .append("layer", lp.getLayer());
-	String id = sessionId + "_" + docId + "_" + lp.getName();
+	String id = docId + "_" + lp.getName();
 	doc.append("_id", id);
 	if (lp.hasTimestamp()) {
 	    doc.append("timestamp", lp.getTimestamp());
@@ -190,23 +174,21 @@ public class MongoNafManager implements Serializable {
 	}
     }
 
-    public void insertLayer(String docId, Integer sessionId, KAFDocument naf, String layerName)
+    public void insertLayer(String docId, KAFDocument naf, String layerName)
     {
-	this.insertLayer(docId, sessionId, naf, layerName, null, null);
+	this.insertLayer(docId, naf, layerName, null, null);
     }
 
-    public void insertLayer(String docId, Integer sessionId, KAFDocument naf, String layerName, Integer paragraph)
+    public void insertLayer(String docId, KAFDocument naf, String layerName, Integer paragraph)
     {
-	this.insertLayer(docId, sessionId, naf, layerName, paragraph, null);
+	this.insertLayer(docId, naf, layerName, paragraph, null);
     }
 
-    public void insertLayer(String docId, Integer sessionId, KAFDocument naf, String layerName, Integer paragraph, Integer sentence)
+    public void insertLayer(String docId, KAFDocument naf, String layerName, Integer paragraph, Integer sentence)
     {
-	//	System.out.println("Insert: " + layerName);
-
 	if (layerName.equals("raw")) {
 	    String layer = naf.getRawText();
-	    this.insertRawText(layer, sessionId, docId);
+	    this.insertRawText(layer, docId);
 	}
 	else {
 	    List<DBObject> annDBObjs = new ArrayList<DBObject>();
@@ -290,16 +272,15 @@ public class MongoNafManager implements Serializable {
 		docCollection = this.causalRelationsColl;
 	    }
 	    if (annDBObjs.size() > 0) {
-		this.insertDocument(annDBObjs, docCollection, sessionId, docId, paragraph, sentence);
+		this.insertDocument(annDBObjs, docCollection, docId, paragraph, sentence);
 	    }
 	}
     }
 
-    private void insertRawText(String rawText, Integer sessionId, String docId)
+    private void insertRawText(String rawText, String docId)
     {
-	String id = docId + "_" + sessionId;
+	String id = docId;
 	DBObject doc = new BasicDBObject("_id", id)
-	    .append("session_id", sessionId)
 	    .append("doc_id", docId)
 	    .append("raw", rawText);
 	try {
@@ -308,11 +289,10 @@ public class MongoNafManager implements Serializable {
 	}
     }
 
-    private void insertDocument(List<DBObject> annotations, DBCollection collection, Integer sessionId, String docId, Integer paragraph, Integer sentence) {
+    private void insertDocument(List<DBObject> annotations, DBCollection collection, String docId, Integer paragraph, Integer sentence) {
 	BasicDBObject doc = new BasicDBObject()
-	    .append("session_id", sessionId)
 	    .append("doc_id", docId);
-	String id = sessionId + "_" + docId;
+	String id = docId;
 	if (paragraph != null) {
 	    id += "_" + paragraph;
 	    doc.append("paragraph", paragraph);
@@ -701,19 +681,19 @@ public class MongoNafManager implements Serializable {
 	return extRefObj;
     }
 
-    public KAFDocument getNaf(Integer sessionId, String docId) throws Exception
+    public KAFDocument getNaf(String docId) throws Exception
     {
 	List<String> layers = new ArrayList<String>();
 	layers.add("all");
-	return this.getNaf(sessionId, docId, layers, "D", null);
+	return this.getNaf(docId, layers, "D", null);
     }
 
-    public KAFDocument getNaf(Integer sessionId, String docId, List<String> layerNames) throws Exception
+    public KAFDocument getNaf(String docId, List<String> layerNames) throws Exception
     {
-	return this.getNaf(sessionId, docId, layerNames, "D", null);
+	return this.getNaf(docId, layerNames, "D", null);
     }
 
-    public KAFDocument getNaf(Integer sessionId, String docId, List<String> layerNames, String granularity, Integer part) throws Exception
+    public KAFDocument getNaf(String docId, List<String> layerNames, String granularity, Integer part) throws Exception
     {
 	//System.out.println("Get: " + layerName);
 
@@ -722,21 +702,21 @@ public class MongoNafManager implements Serializable {
 	    return null;
 	}
 	*/
-	KAFDocument naf = new KAFDocument("en", "v1");
+	KAFDocument naf = new KAFDocument(this.nafLang, this.nafVersion);
 
-	this.getLinguisticProcessors(sessionId, docId, naf);
+	this.getLinguisticProcessors(docId, naf);
 
 	HashMap<String, WF> wfIndex = new HashMap<String, WF>();
 	HashMap<String, Term> termIndex = new HashMap<String, Term>();
 	HashMap<String, Coref> corefIndex = new HashMap<String, Coref>();
 	HashMap<String, Timex3> timexIndex = new HashMap<String, Timex3>();
 
-	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
+	BasicDBObject query = this.createQuery(docId, granularity, part);
 	DBObject nafObj;
 
 
 	// Raw text
-	this.queryRawTextLayer(sessionId, docId, naf);
+	this.queryRawTextLayer(docId, naf);
 	layerNames.remove("raw");
 	if (layerNames.isEmpty()) return naf;
 	
@@ -914,15 +894,13 @@ public class MongoNafManager implements Serializable {
 	    || layerName.equals("causalRelations");
     }
 
-    public List<String> getLinguisticProcessorNames(String docId, Integer sessionId) {
-	DBObject query = new BasicDBObject("session_id", sessionId)
-	    .append("doc_id", docId);
+    public List<String> getLinguisticProcessorNames(String docId) {
+	DBObject query = new BasicDBObject("doc_id", docId);
         return this.lpColl.distinct("name", query);
     }
 
-    public void getLinguisticProcessors(Integer sessionId, String docId, KAFDocument naf) {
-	DBObject query = new BasicDBObject("session_id", sessionId)
-	    .append("doc_id", docId);
+    public void getLinguisticProcessors(String docId, KAFDocument naf) {
+	DBObject query = new BasicDBObject("doc_id", docId);
         List<DBObject> mongoLps = this.lpColl.find(query).toArray();
 	for (DBObject mongoLp : mongoLps) {
 	    this.getLp(mongoLp, naf);
@@ -1258,9 +1236,9 @@ public class MongoNafManager implements Serializable {
 	}
     }
 
-    private void queryRawTextLayer(Integer sessionId, String docId, KAFDocument naf)
+    private void queryRawTextLayer(String docId, KAFDocument naf)
     {
-	String id = docId + "_" + sessionId;
+	String id = docId;
 	DBObject query = new BasicDBObject("_id", id);
 	DBObject rawTextObj = this.rawColl.findOne(query);
 	if (rawTextObj != null) {
@@ -1269,118 +1247,9 @@ public class MongoNafManager implements Serializable {
 	}
     }
 
-    /*
-    private HashMap<String, WF> queryTextLayer(Integer sessionId, String docId, KAFDocument naf, String granularity, Integer part)
+    private BasicDBObject createQuery(String docId, String granularity, Integer part)
     {
-	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
-	DBObject nafObj = this.textColl.findOne(query);
-	List<DBObject> mongoWfs = (List<DBObject>) nafObj.get("annotations");
-	HashMap<String, WF> wfIndex = new HashMap<String, WF>();
-	for (DBObject mongoWf : mongoWfs) {
-
-	}
-	return wfIndex;
-    }
-
-    private HashMap<String, Term> queryTermsLayer(Integer sessionId, String docId, KAFDocument naf, HashMap<String, WF> wfIndex, String granularity, Integer part) {
-	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
-	DBCursor cursor = this.termsColl.find(query);
-	HashMap<String, Term> termIndex = new HashMap<String, Term>();
-	while (cursor.hasNext()) {
-	    List<DBObject> mongoTerms = (List<DBObject>) cursor.next().get("annotations");
-	    for (DBObject mongoTerm : mongoTerms) {
-
-	    }
-	}
-	return termIndex;
-    }
-    
-    private HashMap<String, Entity> queryEntitiesLayer(Integer sessionId, String docId, KAFDocument naf, HashMap<String, Term> termIndex, String granularity, Integer part) {
-	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
-	DBCursor cursor = this.entitiesColl.find(query);
-	HashMap<String, Entity> entityIndex = new HashMap<String, Entity>();
-	while (cursor.hasNext()) {
-	    List<DBObject> mongoEntities = (List<DBObject>) cursor.next().get("annotations");
-	    for (DBObject mongoEntity : mongoEntities) {
-
-	    }
-	}
-	return entityIndex;
-    }
-
-    private void queryDepsLayer(Integer sessionId, String docId, KAFDocument naf, HashMap<String, Term> termIndex, String granularity, Integer part) {
-	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
-	DBCursor cursor = this.depsColl.find(query);
-	while (cursor.hasNext()) {
-	    List<DBObject> mongoDeps = (List<DBObject>) cursor.next().get("annotations");
-	    for (DBObject mongoDep : mongoDeps) {
-
-	    }
-	}
-    }
-
-    private void queryConstituentsLayer(Integer sessionId, String docId, KAFDocument naf, HashMap<String, Term> termIndex, String granularity, Integer part) {
-	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
-	DBCursor cursor = this.constituentsColl.find(query);
-	while (cursor.hasNext()) {
-	    List<DBObject> mongoTrees = (List<DBObject>) cursor.next().get("annotations");
-	    for (DBObject mongoTree : mongoTrees) {
-
-	    }
-	}
-    }
-
-    private void queryChunksLayer(Integer sessionId, String docId, KAFDocument naf, HashMap<String, Term> termIndex, String granularity, Integer part) {
-	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
-	DBCursor cursor = this.chunksColl.find(query);
-	while (cursor.hasNext()) {
-	    List<DBObject> mongoChunks = (List<DBObject>) cursor.next().get("annotations");
-	    for (DBObject mongoChunk : mongoChunks) {
-
-	    }
-	}
-    }
-
-    /*
-    private void queryCoreferencesLayer(Integer sessionId, String docId, KAFDocument naf, HashMap<String, Term> termIndex, String granularity, Integer part) {
-	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
-	DBCursor cursor = this.corefsColl.find(query);
-	while (cursor.hasNext()) {
-	    List<DBObject> mongoCorefs = (List<DBObject>) cursor.next().get("annotations");
-	    for (DBObject mongoCoref : mongoCorefs) {
-
-	    }
-	}
-    }
-    
-
-    private void queryOpinionsLayer(Integer sessionId, String docId, KAFDocument naf, HashMap<String, Term> termIndex, String granularity, Integer part) {
-	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
-	DBCursor cursor = this.opinionsColl.find(query);
-	while (cursor.hasNext()) {
-	    List<DBObject> mongoOpinions = (List<DBObject>) cursor.next().get("annotations");
-	    for (DBObject mongoOpinion : mongoOpinions) {
-
-	    }
-	}
-    }
-
-    private void querySrlLayer(Integer sessionId, String docId, KAFDocument naf, HashMap<String, Term> termIndex, String granularity, Integer part) {
-	BasicDBObject query = this.createQuery(sessionId, docId, granularity, part);
-	DBCursor cursor = this.srlColl.find(query);
-	while (cursor.hasNext()) {
-	    List<DBObject> mongoPredicates = (List<DBObject>) cursor.next().get("annotations");
-	    for (DBObject mongoPredicate : mongoPredicates) {
-
-	    }
-	}
-    }
-    */
-
-    private BasicDBObject createQuery(Integer sessionId, String docId, String granularity, Integer part)
-    {
-	BasicDBObject query = new BasicDBObject("session_id", sessionId).
-	    append("doc_id", docId);
+	BasicDBObject query = new BasicDBObject("doc_id", docId);
 	if (granularity == "P") {
 	    query.append("paragraph", part);
 	} else if (granularity == "S") {
@@ -1431,40 +1300,6 @@ public class MongoNafManager implements Serializable {
 
 
     /*
-    public int getNextSessionId()
-    {
-	DBObject ref = new BasicDBObject();
-	DBObject keys = new BasicDBObject("session_id", 1).append("_id", 0);
-	DBObject orderBy = new BasicDBObject("session_id", -1);
-	DBCursor sessions = this.sesColl.find(ref, keys);
-	if (sessions.count() == 0) {
-	    return 1;
-	}
-	Integer lastId = (Integer)sessions.sort(orderBy).limit(1).next().get("session_id");
-	return lastId + 1;
-    }
-
-    public boolean sessionIdExists(Integer sessionId)
-    {
-	DBObject query = new BasicDBObject("session_id", sessionId);
-	DBCursor session = this.sesColl.find(query);
-	return session.count() > 0;
-    }
-
-    public void newSession(Integer sessionId, Integer numDoc)
-    {
-	DBObject query = new BasicDBObject("session_id", sessionId)
-	    .append("num_docs", numDoc);
-        this.sesColl.insert(query);
-    }
-
-    public void updateSessionDocuments(Integer sessionId, Integer numDoc)
-    {
-	DBObject ref = new BasicDBObject("session_id", sessionId);
-	DBObject query = new BasicDBObject("$inc", new BasicDBObject("num_docs", numDoc));
-        this.sesColl.update(ref, query);
-    }
-
     public void writeLogEntry(Integer sessionId, String entry)
     {
 	BasicDBObject entryDoc = new BasicDBObject("session_id", sessionId)
