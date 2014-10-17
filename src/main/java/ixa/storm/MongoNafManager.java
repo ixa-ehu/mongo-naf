@@ -701,6 +701,7 @@ public class MongoNafManager {
 	    return null;
 	}
 	*/
+	List<String> layerNamesCp = new ArrayList<String>(layerNames);
 	KAFDocument naf = new KAFDocument(this.nafLang, this.nafVersion);
 
 	this.getLinguisticProcessors(docId, naf);
@@ -716,8 +717,8 @@ public class MongoNafManager {
 
 	// Raw text
 	this.queryRawTextLayer(docId, naf);
-	layerNames.remove("raw");
-	if (layerNames.isEmpty()) return naf;
+	layerNamesCp.remove("raw");
+	if (layerNamesCp.isEmpty()) return naf;
 	
 	// Text
 	nafObj = this.textColl.findOne(query);
@@ -726,8 +727,8 @@ public class MongoNafManager {
 		this.getWf(mongoAnnotation, naf, wfIndex);
 	    }
 	}
-	layerNames.remove("text");
-	if (layerNames.isEmpty()) return naf;
+	layerNamesCp.remove("text");
+	if (layerNamesCp.isEmpty()) return naf;
 
 	// Terms
 	nafObj = this.termsColl.findOne(query);
@@ -736,139 +737,139 @@ public class MongoNafManager {
 		this.getTerm(mongoAnnotation, naf, termIndex, wfIndex);
 	    }
 	}
-	layerNames.remove("terms");
-	if (layerNames.isEmpty()) return naf;
+	layerNamesCp.remove("terms");
+	if (layerNamesCp.isEmpty()) return naf;
 
 	// Entities
-	if (layerNames.contains("entities") || layerNames.get(0).equals("all")) {
+	if (layerNamesCp.contains("entities") || layerNamesCp.get(0).equals("all")) {
 	    nafObj = this.entitiesColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getEntity(mongoAnnotation, naf, termIndex);
 		}
 	    }
-	    layerNames.remove("entities");
-	    if (layerNames.isEmpty()) return naf;
+	    layerNamesCp.remove("entities");
+	    if (layerNamesCp.isEmpty()) return naf;
 	}
 
 	// Deps
-	if (layerNames.contains("deps") || layerNames.get(0).equals("all")) {
+	if (layerNamesCp.contains("deps") || layerNamesCp.get(0).equals("all")) {
 	    nafObj = this.depsColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getDep(mongoAnnotation, naf, termIndex);
 		}
 	    }
-	    layerNames.remove("deps");
-	    if (layerNames.isEmpty()) return naf;
+	    layerNamesCp.remove("deps");
+	    if (layerNamesCp.isEmpty()) return naf;
 	}
 
 	// Constituents
-	if (layerNames.contains("constituency") || layerNames.get(0).equals("all")) {
+	if (layerNamesCp.contains("constituency") || layerNamesCp.get(0).equals("all")) {
 	    nafObj = this.constituentsColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getTree(mongoAnnotation, naf, termIndex);
 		}
 	    }
-	    layerNames.remove("constituency");
-	    if (layerNames.isEmpty()) return naf;
+	    layerNamesCp.remove("constituency");
+	    if (layerNamesCp.isEmpty()) return naf;
 	}
 
 	// Chunks
-	if (layerNames.contains("chunks") || layerNames.get(0).equals("all")) {
+	if (layerNamesCp.contains("chunks") || layerNamesCp.get(0).equals("all")) {
 	    nafObj = this.chunksColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getChunk(mongoAnnotation, naf, termIndex);
 		}
 	    }
-	    layerNames.remove("chunks");
-	    if (layerNames.isEmpty()) return naf;
+	    layerNamesCp.remove("chunks");
+	    if (layerNamesCp.isEmpty()) return naf;
 	}
 	
 	// Coreferences
-	if (layerNames.contains("coreferences") || layerNames.get(0).equals("all")) {
+	if (layerNamesCp.contains("coreferences") || layerNamesCp.get(0).equals("all")) {
 	    nafObj = this.corefsColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getCoref(mongoAnnotation, naf, corefIndex, termIndex);
 		}
 	    }
-	    layerNames.remove("coreferences");
-	    if (layerNames.isEmpty()) return naf;
+	    layerNamesCp.remove("coreferences");
+	    if (layerNamesCp.isEmpty()) return naf;
 	}
 
 	// Opinions
-	if (layerNames.contains("opinions") || layerNames.get(0).equals("all")) {
+	if (layerNamesCp.contains("opinions") || layerNamesCp.get(0).equals("all")) {
 	    nafObj = this.opinionsColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getOpinion(mongoAnnotation, naf, termIndex);
 		}
 	    }
-	    layerNames.remove("opinions");
-	    if (layerNames.isEmpty()) return naf;
+	    layerNamesCp.remove("opinions");
+	    if (layerNamesCp.isEmpty()) return naf;
 	}
 
 	// SRL
-	if (layerNames.contains("srl") || layerNames.get(0).equals("all")) {
+	if (layerNamesCp.contains("srl") || layerNamesCp.get(0).equals("all")) {
 	    nafObj = this.srlColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getPredicate(mongoAnnotation, naf, termIndex);
 		}
 	    }
-	    layerNames.remove("srl");
-	    if (layerNames.isEmpty()) return naf;
+	    layerNamesCp.remove("srl");
+	    if (layerNamesCp.isEmpty()) return naf;
 	}
 
 	// Factuality layer
-	if (layerNames.contains("factualitylayer") || layerNames.get(0).equals("all")) {
+	if (layerNamesCp.contains("factualitylayer") || layerNamesCp.get(0).equals("all")) {
 	    nafObj = this.factualityColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getFactuality(mongoAnnotation, naf, wfIndex);
 		}
 	    }
-	    layerNames.remove("factualitylayer");
-	    if (layerNames.isEmpty()) return naf;
+	    layerNamesCp.remove("factualitylayer");
+	    if (layerNamesCp.isEmpty()) return naf;
 	}
 
 	// TimeExpressions layer
-	if (layerNames.contains("timeExpressions") || layerNames.get(0).equals("all")) {
+	if (layerNamesCp.contains("timeExpressions") || layerNamesCp.get(0).equals("all")) {
 	    nafObj = this.timeExpressionsColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getTimex3(mongoAnnotation, naf, timexIndex, wfIndex, termIndex);
 		}
 	    }
-	    layerNames.remove("timeExpressions");
-	    if (layerNames.isEmpty()) return naf;
+	    layerNamesCp.remove("timeExpressions");
+	    if (layerNamesCp.isEmpty()) return naf;
 	}
 
 	// TemporalRelations layer
-	if (layerNames.contains("temporalRelations") || layerNames.get(0).equals("all")) {
+	if (layerNamesCp.contains("temporalRelations") || layerNamesCp.get(0).equals("all")) {
 	    nafObj = this.temporalRelationsColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getTLink(mongoAnnotation, naf, corefIndex, timexIndex);
 		}
 	    }
-	    layerNames.remove("temporalRelations");
-	    if (layerNames.isEmpty()) return naf;
+	    layerNamesCp.remove("temporalRelations");
+	    if (layerNamesCp.isEmpty()) return naf;
 	}
 
 	// CausalRelations layer
-	if (layerNames.contains("causalRelations") || layerNames.get(0).equals("all")) {
+	if (layerNamesCp.contains("causalRelations") || layerNamesCp.get(0).equals("all")) {
 	    nafObj = this.causalRelationsColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
 		    this.getCLink(mongoAnnotation, naf, corefIndex);
 		}
 	    }
-	    layerNames.remove("causalRelations");
-	    if (layerNames.isEmpty()) return naf;
+	    layerNamesCp.remove("causalRelations");
+	    if (layerNamesCp.isEmpty()) return naf;
 	}
 
 	return naf;
