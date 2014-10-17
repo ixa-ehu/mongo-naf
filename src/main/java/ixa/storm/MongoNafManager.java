@@ -166,6 +166,9 @@ public class MongoNafManager {
 	if (lp.hasVersion()) {
 	    doc.append("version", lp.getVersion());
 	}
+	if (lp.hasHostname()) {
+	    doc.append("hostname", lp.getHostname());
+	}
 	try {
 	    this.lpColl.save(doc);
 	} catch(MongoException e) {
@@ -926,6 +929,9 @@ public class MongoNafManager {
 	    }
 	    if (mongoLp.containsField("endTimestamp")) {
 		newLp.setEndTimestamp((String) mongoLp.get("endTimestamp"));
+	    }
+	    if (mongoLp.containsField("hostname")) {
+		newLp.setHostname((String) mongoLp.get("hostname"));
 	    }
 	}
     }
