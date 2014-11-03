@@ -44,7 +44,7 @@ public class MongoNafManager {
     private DBCollection causalRelationsColl;
 
 
-    public MongoNafManager(String server, int port, String dbName)
+    private MongoNafManager(String server, int port, String dbName)
 	throws MongoNafException {
 	try {
 	    MongoClient mongoClient = new MongoClient(server, port);
@@ -74,6 +74,15 @@ public class MongoNafManager {
 	// Default NAF values
 	this.nafVersion = "mongodb_test_version";
 	this.nafLang = "en";
+    }
+
+    public static MongoNafManager instance(String server, int port, String dbName)
+	throws MongoNafException
+    {
+	if (instance == null) {
+	    instance = new MongoNafManager(server, port, dbName);
+	}
+	return instance;
     }
 
     public void defineNafParameters(String version, String lang) {
