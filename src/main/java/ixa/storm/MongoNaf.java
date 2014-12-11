@@ -28,6 +28,7 @@ public class MongoNaf {
     private DB db;
     // MongoDB collections
     private DBCollection logColl;
+    private DBCollection headerColl;
     private DBCollection lpColl;
     private DBCollection rawColl;
     private DBCollection textColl;
@@ -54,6 +55,7 @@ public class MongoNaf {
 	    throw new MongoNafException("Error connecting to MongoDB.");
 	}
 	this.logColl = this.db.getCollection("log");
+	this.headerColl = this.db.getCollection("header");
 	this.lpColl = this.db.getCollection("linguisticProcessors");
 	this.rawColl = this.db.getCollection("raw");
 	this.textColl = this.db.getCollection("text");
@@ -101,6 +103,7 @@ public class MongoNaf {
 
     public void removeDoc(String docId) {
 	DBObject docDef = new BasicDBObject("doc_id", docId);
+	this.headerColl.remove(docDef);
 	this.lpColl.remove(docDef);
 	this.rawColl.remove(docDef);
 	this.textColl.remove(docDef);
@@ -130,7 +133,7 @@ public class MongoNaf {
 
     public void insertNafDocument(String docId, KAFDocument naf, Integer paragraph, Integer sentence)
     {
-	this.insertLinguisticProcessors(docId, naf);
+	this.insertHeader(docId, naf);
 	this.insertLayer(docId, naf, "raw", paragraph, sentence);
 	this.insertLayer(docId, naf, "text", paragraph, sentence);
 	this.insertLayer(docId, naf, "terms", paragraph, sentence);
@@ -145,6 +148,42 @@ public class MongoNaf {
 	this.insertLayer(docId, naf, "timeExpressions", paragraph, sentence);
 	this.insertLayer(docId, naf, "temporalRelations", paragraph, sentence);
 	this.insertLayer(docId, naf, "causalRelations", paragraph, sentence);
+    }
+
+    private void insertHeader(String docId, KAFDocument naf) {
+	BasicDBObject doc = new BasicDBObject()
+	    .append("_id", docId)
+	    .append("doc_id", docId)
+	    .append("lang", naf.getLang())
+	    .append("version", naf.getVersion());
+
+	KAFDocument.FileDesc fileDesc = naf.getFileDesc();
+	if (fileDesc != null) {
+	    BasicDBObject fileDescDoc = new BasicDBObject();
+	    if (fileDesc.author != null) fileDescDoc.append("author", fileDesc.author);
+	    if (fileDesc.title != null) fileDescDoc.append("title", fileDesc.title);
+	    if (fileDesc.filename != null) fileDescDoc.append("filename", fileDesc.filename);
+	    if (fileDesc.filetype != null) fileDescDoc.append("filetype", fileDesc.filetype);
+	    if (fileDesc.pages != null) fileDescDoc.append("pages", fileDesc.pages);
+	    if (fileDesc.creationtime != null) fileDescDoc.append("creationtime", fileDesc.creationtime);
+	    doc.append("fileDesc", fileDescDoc);
+	}
+
+	KAFDocument.Public pub = naf.getPublic();
+	if (pub != null) {
+	    BasicDBObject publicDoc = new BasicDBObject();
+	    if (pub.publicId != null) publicDoc.append("publicId", pub.publicId);
+	    if (pub.uri != null) publicDoc.append("uri", pub.uri);
+	    doc.append("public", publicDoc);
+	}
+
+	try {
+	    this.headerColl.save(doc);
+	} catch(MongoException e) {
+	    System.out.println("Error storing the header");
+	}
+	
+	this.insertLinguisticProcessors(docId, naf);
     }
 
     // Insert LPs from a NAF document into the DB
@@ -715,9 +754,16 @@ public class MongoNaf {
 	}
 	*/
 	List<String> layerNamesCp = new ArrayList<String>(layerNames);
-	KAFDocument naf = new KAFDocument(this.nafLang, this.nafVersion);
 
-	this.getLinguisticProcessors(docId, naf);
+	BasicDBObject headerQuery = new BasicDBObject("doc_id", docId);
+	DBObject headerObj = this.headerColl.findOne(headerQuery);
+	KAFDocument naf = new KAFDocument((String) headerObj.get("lang"), (String) headerObj.get("version"));
+
+	// If full document was requested, return the LPs too
+	if (layerNames.size() == 1 && layerNames.get(0).equals("all")) { 
+	    this.getHeader(naf, headerObj);
+	    this.getLinguisticProcessors(docId, naf);
+	}
 
 	HashMap<String, WF> wfIndex = new HashMap<String, WF>();
 	HashMap<String, Term> termIndex = new HashMap<String, Term>();
@@ -905,6 +951,42 @@ public class MongoNaf {
 	    || layerName.equals("timeExpressions")
 	    || layerName.equals("temporalRelations")
 	    || layerName.equals("causalRelations");
+    }
+
+    private void getHeader(KAFDocument naf, DBObject headerObj) {
+	if (headerObj.containsField("fileDesc")) {
+	    KAFDocument.FileDesc fileDesc = naf.createFileDesc();
+	    DBObject fileDescObj = (DBObject) headerObj.get("fileDesc");
+	    if (fileDescObj.containsField("author")) {
+		fileDesc.author = (String) fileDescObj.get("author");
+	    }
+	    if (fileDescObj.containsField("title")) {
+		fileDesc.title = (String) fileDescObj.get("title");
+	    }
+	    if (fileDescObj.containsField("filename")) {
+		fileDesc.filename = (String) fileDescObj.get("filename");
+	    }
+	    if (fileDescObj.containsField("filetype")) {
+		fileDesc.filetype = (String) fileDescObj.get("filetype");
+	    }
+	    if (fileDescObj.containsField("pages")) {
+		fileDesc.pages = (Integer) fileDescObj.get("pages");
+	    }
+	    if (fileDescObj.containsField("creationtime")) {
+		fileDesc.creationtime = (String) fileDescObj.get("creationtime");
+	    }
+	}
+
+	if (headerObj.containsField("public")) {
+	    KAFDocument.Public pub = naf.createPublic();
+	    DBObject publicObj = (DBObject) headerObj.get("public");
+	    if (publicObj.containsField("publicId")) {
+		pub.publicId = (String) publicObj.get("publicId");
+	    }
+	    if (publicObj.containsField("uri")) {
+		pub.uri = (String) publicObj.get("uri");
+	    }
+	}
     }
 
     public List<String> getLinguisticProcessorNames(String docId) {
