@@ -26,6 +26,7 @@ public class MongoNafManager {
     private String nafVersion;
     private String nafLang;
     private DB db;
+    // MongoDB collections
     private DBCollection logColl;
     private DBCollection lpColl;
     private DBCollection rawColl;
@@ -146,6 +147,7 @@ public class MongoNafManager {
 	this.insertLayer(docId, naf, "causalRelations", paragraph, sentence);
     }
 
+    // Insert LPs from a NAF document into the DB
     public void insertLinguisticProcessors(String docId, KAFDocument naf) {
 	List<String> existingLps = this.getLinguisticProcessorNames(docId);
 	List<LinguisticProcessor> lps = naf.getLinguisticProcessorList();
@@ -156,6 +158,7 @@ public class MongoNafManager {
 	}
     }
 
+    // Insert a given LP into the DB
     public void insertLinguisticProcessor(String docId, LinguisticProcessor lp) {
 	BasicDBObject doc = new BasicDBObject()
 	    .append("doc_id", docId)
@@ -656,8 +659,8 @@ public class MongoNafManager {
     }
 
     private DBObject map(TLink tLink) {
-	String fromType = (tLink.getFrom() instanceof Coref) ? "event" : "timex";
-	String toType = (tLink.getTo() instanceof Coref) ? "event" : "timex";
+	String fromType = (tLink.getFrom() instanceof Predicate) ? "event" : "timex";
+	String toType = (tLink.getTo() instanceof Predicate) ? "event" : "timex";	
 	BasicDBObject tLinkObj = new BasicDBObject("id", tLink.getId()).
 	    append("from", tLink.getFrom().getId()).
 	    append("to", tLink.getTo().getId()).
@@ -698,7 +701,7 @@ public class MongoNafManager {
 	layers.add("all");
 	return this.getNaf(docId, layers, "D", null);
     }
-
+ 
     public KAFDocument getNaf(String docId, List<String> layerNames) throws Exception
     {
 	return this.getNaf(docId, layerNames, "D", null);
@@ -706,8 +709,6 @@ public class MongoNafManager {
 
     public KAFDocument getNaf(String docId, List<String> layerNames, String granularity, Integer part) throws Exception
     {
-	//System.out.println("Get: " + layerName);
-
 	/*
 	if (!this.validLayerName(layerName)) {
 	    return null;
@@ -720,7 +721,7 @@ public class MongoNafManager {
 
 	HashMap<String, WF> wfIndex = new HashMap<String, WF>();
 	HashMap<String, Term> termIndex = new HashMap<String, Term>();
-	HashMap<String, Coref> corefIndex = new HashMap<String, Coref>();
+	HashMap<String, Predicate> predicateIndex = new HashMap<String, Predicate>();
 	HashMap<String, Timex3> timexIndex = new HashMap<String, Timex3>();
 
 	BasicDBObject query = this.createQuery(docId, granularity, part);
@@ -805,7 +806,7 @@ public class MongoNafManager {
 	    nafObj = this.corefsColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-		    this.getCoref(mongoAnnotation, naf, corefIndex, termIndex);
+		    this.getCoref(mongoAnnotation, naf, termIndex);
 		}
 	    }
 	    layerNamesCp.remove("coreferences");
@@ -829,7 +830,7 @@ public class MongoNafManager {
 	    nafObj = this.srlColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-		    this.getPredicate(mongoAnnotation, naf, termIndex);
+		    this.getPredicate(mongoAnnotation, naf, predicateIndex, termIndex);
 		}
 	    }
 	    layerNamesCp.remove("srl");
@@ -865,7 +866,7 @@ public class MongoNafManager {
 	    nafObj = this.temporalRelationsColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-		    this.getTLink(mongoAnnotation, naf, corefIndex, timexIndex);
+		    this.getTLink(mongoAnnotation, naf, predicateIndex, timexIndex);
 		}
 	    }
 	    layerNamesCp.remove("temporalRelations");
@@ -877,7 +878,7 @@ public class MongoNafManager {
 	    nafObj = this.causalRelationsColl.findOne(query);
 	    if (nafObj != null) {
 		for (DBObject mongoAnnotation : (List<DBObject>) nafObj.get("annotations")) {
-		    this.getCLink(mongoAnnotation, naf, corefIndex);
+		    this.getCLink(mongoAnnotation, naf, predicateIndex);
 		}
 	    }
 	    layerNamesCp.remove("causalRelations");
@@ -920,7 +921,6 @@ public class MongoNafManager {
     }
 
 
-    /* PRIVATE METHODS */
 
     private void getLp(DBObject mongoLp, KAFDocument naf) {
 	String layer = (String) mongoLp.get("layer");
@@ -1083,7 +1083,7 @@ public class MongoNafManager {
 	}	
     }
 
-    private void getCoref(DBObject mongoCoref, KAFDocument naf, HashMap<String, Coref> corefIndex, HashMap<String, Term> termIndex)
+    private void getCoref(DBObject mongoCoref, KAFDocument naf, HashMap<String, Term> termIndex)
     {
 	List<BasicDBList> mentionObjs = (List<BasicDBList>) mongoCoref.get("anchor");
 	List<Span<Term>> mentions = new ArrayList<Span<Term>>();
@@ -1101,7 +1101,6 @@ public class MongoNafManager {
 	if (mongoCoref.containsField("type")) {
 	    coref.setType((String) mongoCoref.get("type"));
 	}
-	corefIndex.put(coref.getId(), coref);
     }
 
     private void getOpinion(DBObject mongoOpinion, KAFDocument naf, HashMap<String, Term> termIndex)
@@ -1141,7 +1140,7 @@ public class MongoNafManager {
 	}
     }
 
-    private void getPredicate(DBObject mongoPredicate, KAFDocument naf, HashMap<String, Term> termIndex)
+    private void getPredicate(DBObject mongoPredicate, KAFDocument naf, HashMap<String, Predicate> predicateIndex, HashMap<String, Term> termIndex)
     {
 	String id = (String) mongoPredicate.get("id");
 	BasicDBList termIds = (BasicDBList) mongoPredicate.get("anchor");
@@ -1161,7 +1160,8 @@ public class MongoNafManager {
 	    role.addExternalRefs(this.externalRefsMongo2Naf(mongoRole, naf));
 	    predicate.addRole(role);
 	}
-	predicate.addExternalRefs(this.externalRefsMongo2Naf(mongoPredicate, naf));	
+	predicate.addExternalRefs(this.externalRefsMongo2Naf(mongoPredicate, naf));
+	predicateIndex.put(predicate.getId(), predicate);
     }
 
     private void getFactuality(DBObject mongoFactuality, KAFDocument naf, HashMap<String, WF> wfIndex)
@@ -1226,25 +1226,25 @@ public class MongoNafManager {
 	timexIndex.put(timex3.getId(), timex3);
     }
 
-    private void getTLink(DBObject mongoTLink, KAFDocument naf, HashMap<String, Coref> corefIndex, HashMap<String, Timex3> timexIndex) {
+    private void getTLink(DBObject mongoTLink, KAFDocument naf, HashMap<String, Predicate> predicateIndex, HashMap<String, Timex3> timexIndex) {
 	String id = (String) mongoTLink.get("id");
 	String fromId = (String) mongoTLink.get("from");
 	String toId = (String) mongoTLink.get("to");
 	String fromType = (String) mongoTLink.get("fromType");
 	String toType = (String) mongoTLink.get("toType");
 	String relType = (String) mongoTLink.get("relType");
-	TLinkReferable from = fromType.equals("event") ? corefIndex.get(fromId) : timexIndex.get(fromId);
-	TLinkReferable to = toType.equals("event") ? corefIndex.get(toId) : timexIndex.get(toId);
+	TLinkReferable from = fromType.equals("event") ? predicateIndex.get(fromId) : timexIndex.get(fromId);
+	TLinkReferable to = toType.equals("event") ? predicateIndex.get(toId) : timexIndex.get(toId);
 	TLink tLink = naf.newTLink(id, from, to, relType);
     }
 
-    private void getCLink(DBObject mongoCLink, KAFDocument naf, HashMap<String, Coref> corefIndex) {
+    private void getCLink(DBObject mongoCLink, KAFDocument naf, HashMap<String, Predicate> predicateIndex) {
 	String id = (String) mongoCLink.get("id");
 	String fromId = (String) mongoCLink.get("from");
 	String toId = (String) mongoCLink.get("to");
 	String relType = (String) mongoCLink.get("relType");
-	Coref from = corefIndex.get(fromId);
-	Coref to = corefIndex.get(toId);
+	Predicate from = predicateIndex.get(fromId);
+	Predicate to = predicateIndex.get(toId);
 	CLink cLink = naf.newCLink(id, from, to);
 	if (mongoCLink.containsField("relType")) {
 	    cLink.setRelType((String) mongoCLink.get("relType"));
@@ -1334,19 +1334,5 @@ public class MongoNafManager {
     {
 	this.logColl.insert(entry);
     }
-
-    /*
-    public List<String> getLog(Integer sessionId)
-    {
-	BasicDBObject query = new BasicDBObject("session_id", sessionId);
-	DBCursor logEntries = this.logColl.find(query);
-	List<String> log = new ArrayList<String>();
-	while (logEntries.hasNext()) {
-	    String entry = (String) logEntries.next().get("value");
-	    log.add(entry);
-	}
-	return log;
-    }
-    */
 
 }
