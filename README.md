@@ -11,6 +11,7 @@ Public interface
 
 ```Java
 
+// Returns the MongoNaf instance
 static MongoNaf instance(String server, int port, String dbName);
 
 
