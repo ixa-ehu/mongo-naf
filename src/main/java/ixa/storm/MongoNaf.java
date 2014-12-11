@@ -20,9 +20,9 @@ import java.net.UnknownHostException;
 import java.io.Serializable;
 
 
-public class MongoNafManager {
+public class MongoNaf {
 
-    private static MongoNafManager instance;
+    private static MongoNaf instance;
     private String nafVersion;
     private String nafLang;
     private DB db;
@@ -45,7 +45,7 @@ public class MongoNafManager {
     private DBCollection causalRelationsColl;
 
 
-    private MongoNafManager(String server, int port, String dbName)
+    private MongoNaf(String server, int port, String dbName)
 	throws MongoNafException {
 	try {
 	    MongoClient mongoClient = new MongoClient(server, port);
@@ -77,11 +77,11 @@ public class MongoNafManager {
 	this.nafLang = "en";
     }
 
-    public static MongoNafManager instance(String server, int port, String dbName)
+    public static MongoNaf instance(String server, int port, String dbName)
 	throws MongoNafException
     {
 	if (instance == null) {
-	    instance = new MongoNafManager(server, port, dbName);
+	    instance = new MongoNaf(server, port, dbName);
 	}
 	return instance;
     }
