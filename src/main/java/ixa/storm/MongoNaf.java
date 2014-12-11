@@ -86,7 +86,7 @@ public class MongoNaf {
 	return instance;
     }
 
-    public void defineNafParameters(String version, String lang) {
+    public void setNafParameters(String version, String lang) {
 	this.nafVersion = version;
 	this.nafLang = lang;
     }
