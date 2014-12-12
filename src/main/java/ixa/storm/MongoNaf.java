@@ -16,8 +16,10 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Date;
 import java.net.UnknownHostException;
 import java.io.Serializable;
+
 
 
 public class MongoNaf {
@@ -1395,7 +1397,7 @@ public class MongoNaf {
 	return extRef;
     }
 
-    public void writeDocLogEntry(String tag, String docId, Long timestamp, String hostname) throws Exception {
+    public void writeDocLogEntry(String tag, String docId, Date timestamp, String hostname) throws Exception {
 	DBObject obj = new BasicDBObject("tag", tag)
 	    .append("doc_id", docId)
 	    .append("timestamp", timestamp)
@@ -1403,7 +1405,7 @@ public class MongoNaf {
 	this.writeLogEntry(obj);
     }
 
-    public void writeModuleLogEntry(String tag, String docId, String moduleId, Long timestamp, String hostname) throws Exception {
+    public void writeModuleLogEntry(String tag, String docId, String moduleId, Date timestamp, String hostname) throws Exception {
 	DBObject obj = new BasicDBObject("tag", tag)
 	    .append("doc_id", docId)
 	    .append("module_id", moduleId)
