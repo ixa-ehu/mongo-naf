@@ -1390,9 +1390,13 @@ public class MongoNaf {
 	    extRef.setConfidence(new Float((Double) mongoExtRef.get("confidence")));
 	}
 	if (mongoExtRef.containsField("external_reference")) {
+	    DBObject mongoSubExtRef = (DBObject) mongoExtRef.get("external_reference");
+	    extRef.setExternalRef(this.externalRefMongo2Naf(mongoSubExtRef, naf));
+	    /*
 	    for (DBObject mongoSubExtRef : (List<DBObject>) mongoExtRef.get("external_reference")) {
 		extRef.setExternalRef(this.externalRefMongo2Naf(mongoSubExtRef, naf));
 	    }
+	    */
 	}
 	return extRef;
     }
